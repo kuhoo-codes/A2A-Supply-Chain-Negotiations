@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+.next/
+dist/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env
+.env
+
+# Build and logs
+coverage/
+*.log
+
+# Local exports
+exports/*
+!exports/.gitkeep
