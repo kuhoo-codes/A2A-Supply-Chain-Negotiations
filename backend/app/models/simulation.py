@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from backend.app.models.run import RunRecord
+from backend.app.models.run import RunEventLog, RunRecord
 
 
 class PipelineDependencyStatus(BaseModel):
@@ -14,6 +14,9 @@ class PipelineDependencyStatus(BaseModel):
 class PipelineExportRecord(BaseModel):
     file_path: str
     created_at: datetime
+    event_log_path: str | None = None
+    trace_path: str | None = None
+    conversation_path: str | None = None
 
 
 class SimulationTestPipelineResult(BaseModel):
@@ -31,3 +34,19 @@ class SimulationBatchResult(BaseModel):
     seed: int
     count: int
     runs: list[RunRecord]
+
+
+class RunDetailExportArtifacts(BaseModel):
+    summary_path: str | None = None
+    event_log_path: str | None = None
+    trace_path: str | None = None
+    conversation_path: str | None = None
+
+
+class RunDetailResponse(BaseModel):
+    run: RunRecord
+    event_log: RunEventLog | None = None
+    trace_metadata: dict | None = None
+    export_artifacts: RunDetailExportArtifacts | None = None
+    derived: dict | None = None
+    conversation: list[dict] | None = None

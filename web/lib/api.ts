@@ -1,5 +1,6 @@
 import {
   HealthResponse,
+  RunDetailResponse,
   RunRecord,
   RunSummary,
   SimulationTestPipelineResult,
@@ -97,6 +98,13 @@ export async function getRuns(): Promise<ApiResult<RunSummary[]>> {
 
 export async function getRun(id: string): Promise<ApiResult<RunRecord>> {
   return fetchApi<RunRecord>(`/runs/${id}`);
+}
+
+
+export async function getRunDetail(
+  id: string,
+): Promise<ApiResult<RunDetailResponse>> {
+  return fetchApi<RunDetailResponse>(`/runs/${id}/detail`);
 }
 
 

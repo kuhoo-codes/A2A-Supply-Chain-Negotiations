@@ -23,6 +23,9 @@ export type PipelineDependencyStatus = {
 export type PipelineExportRecord = {
   file_path: string;
   created_at: string;
+  event_log_path: string | null;
+  trace_path: string | null;
+  conversation_path: string | null;
 };
 
 export type SimulationTestPipelineResult = {
@@ -72,6 +75,45 @@ export type ToolCallEvent = {
   created_at: string;
 };
 
+export type RunEventType =
+  | "run_start"
+  | "run_end"
+  | "phase_start"
+  | "phase_end"
+  | "agent_turn"
+  | "tool_call"
+  | "market_price_check"
+  | "offer_made"
+  | "offer_received"
+  | "accept"
+  | "reject"
+  | "timeout"
+  | "final_outcome";
+
+export type RunEvent = {
+  run_id: string;
+  timestamp: string;
+  phase: PhaseName | null;
+  round: number | null;
+  agent: string | null;
+  event_type: RunEventType;
+  observed_market_price: number | null;
+  offer_price: number | null;
+  action: string | null;
+  status: string | null;
+  note: string | null;
+  reasoning_summary: string | null;
+  negotiation_id: string | null;
+  tool_name: string | null;
+};
+
+export type RunEventLog = {
+  run_id: string;
+  created_at: string;
+  updated_at: string;
+  events: RunEvent[];
+};
+
 export type NegotiationStep = {
   index: number;
   phase: PhaseName;
@@ -82,8 +124,16 @@ export type NegotiationStep = {
   message: string;
   outcome: string;
   proposed_price: number | null;
+  delivered_message: DeliveredMessage | null;
   created_at: string;
   tool_calls: ToolCallEvent[];
+};
+
+export type DeliveredMessage = {
+  type: string;
+  price: number | null;
+  note: string | null;
+  from_agent_id: string | null;
 };
 
 export type DiagnosisSummary = {
@@ -150,4 +200,36 @@ export type RunRecord = {
   max_rounds_per_negotiation: number;
   notes: string;
   tags: string[];
+};
+
+export type RunDetailExportArtifacts = {
+  summary_path: string | null;
+  event_log_path: string | null;
+  trace_path: string | null;
+  conversation_path: string | null;
+};
+
+export type ConversationMessage = {
+  index: number;
+  timestamp: string;
+  phase: PhaseName;
+  round: number;
+  speaker_id: string;
+  speaker_name: string;
+  speaker_role: AgentRole | null;
+  kind: string;
+  message: string;
+  outcome: string;
+  offer_price: number | null;
+  delivered_message: DeliveredMessage | null;
+  currency: string;
+};
+
+export type RunDetailResponse = {
+  run: RunRecord;
+  event_log: RunEventLog | null;
+  trace_metadata: Record<string, unknown> | null;
+  export_artifacts: RunDetailExportArtifacts | null;
+  derived: Record<string, unknown> | null;
+  conversation: ConversationMessage[] | null;
 };

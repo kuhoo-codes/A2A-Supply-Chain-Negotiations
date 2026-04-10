@@ -1,10 +1,13 @@
-from backend.app.models.run import NegotiationRecord, RunRecord, RunSummary
-from backend.app.models.simulation import SimulationBatchResult, SimulationTestPipelineResult
+from backend.app.models.run import NegotiationRecord, RunEvent, RunEventLog, RunRecord, RunSummary
+from backend.app.models.simulation import RunDetailResponse, SimulationBatchResult, SimulationTestPipelineResult
 
 __all__ = [
     "NegotiationRecord",
+    "RunEvent",
+    "RunEventLog",
     "RunRecord",
     "RunSummary",
+    "RunDetailResponse",
     "SimulationBatchResult",
     "SimulationTestPipelineResult",
 ]

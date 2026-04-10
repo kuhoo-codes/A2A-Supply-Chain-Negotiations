@@ -91,6 +91,7 @@ Useful backend endpoints:
 - `GET http://localhost:8000/health`
 - `GET http://localhost:8000/runs`
 - `GET http://localhost:8000/runs/{id}`
+- `GET http://localhost:8000/runs/{id}/detail`
 - `POST http://localhost:8000/simulation/run`
 - `POST http://localhost:8000/simulation/test-pipeline`
 - `http://localhost:8000/docs`
@@ -149,6 +150,8 @@ What gets saved:
 - both phase records when phase one accepts
 - round-by-round step history
 - offers, market checks, and final outcomes
+- a structured event log per run in `events/`
+- an export bundle per run in `exports/{run_id}/`
 
 ## How To Test The Pipeline
 
@@ -160,8 +163,8 @@ What gets saved:
 Expected behavior:
 
 - Three seeded ketchup runs are created and saved in `runs/`
-- A simulation export file is saved in `exports/`
-- A trace reference is returned only when Langfuse keys are configured
+- An export bundle is saved in `exports/{run_id}/`
+- A real trace id is returned only when Langfuse is configured and available
 - Missing OpenAI or Langfuse keys do not crash the app; the result still returns cleanly
 
 ### From the backend directly
@@ -172,10 +175,66 @@ curl -X POST http://localhost:8000/simulation/test-pipeline \
   -d '{"seed": 42}'
 ```
 
+## Tracing
+
+What gets traced when Langfuse is configured:
+
+- the full simulation run
+- each negotiation phase
+- each agent decision
+- each tool call
+- each OpenAI decision call
+- the final run result
+
+Tracing is best-effort:
+
+- if `LANGFUSE_PUBLIC_KEY` or `LANGFUSE_SECRET_KEY` is missing, the simulation still runs
+- if the Langfuse SDK is unavailable or tracing init fails, the simulation still runs
+- trace metadata is only exported when a real trace id is available
+
+How to check if tracing is working:
+
+1. Set valid `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` values in `.env`.
+2. Run `POST /simulation/test-pipeline`.
+3. Confirm the response includes a non-null `trace_id`.
+4. Open the run detail page and check the `Trace status and exports` section.
+5. Inspect `exports/{run_id}/trace-metadata.json` for the saved trace id and trace URL.
+6. Inspect `exports/{run_id}/conversation.json` if you want the ordered negotiation transcript in chat-like form.
+
+If tracing is not working, the app will still complete the simulation, but the run detail page and trace export will show tracing as unavailable.
+
+## Storage
+
+What gets saved in `runs/`:
+
+- one canonical JSON run record per run at `runs/{run_id}.json`
+- product context, agents, phases, steps, negotiations, diagnosis, and run status
+
+What gets saved in `events/`:
+
+- one structured event stream per run at `events/{run_id}.events.json`
+- run lifecycle events, phase transitions, offers, tool calls, market checks, accept/reject/timeout outcomes, and final outcome
+
+What gets saved in `exports/`:
+
+- one folder per exported run at `exports/{run_id}/`
+- `summary.json`: run snapshot plus lightweight derived values
+- `event-log.json`: exported structured event log for downstream use
+- `trace-metadata.json`: saved trace id, trace URL, Langfuse status, and phase-level trace summary
+- `conversation.json`: ordered negotiation transcript derived from the run steps
+
+Derived fields currently exported include:
+
+- belief gap samples and average belief gap
+- manufacturer margin after the first deal
+- where the run failed
+- suspected failure type when one can be inferred cheaply
+
 ## Notes
 
 - Backend run records are stored as JSON in `runs/`
-- Simulation exports are stored as JSON in `exports/`
+- Structured event logs are stored as JSON in `events/`
+- Simulation export bundles are stored as JSON in `exports/{run_id}/`
 - Each run simulates two linked negotiations: seller to manufacturer, then manufacturer to retailer
 - Each seed produces three ketchup business scenarios
 - The first deal affects the second through the manufacturer cost basis and downstream sell floor

@@ -16,6 +16,9 @@ from backend.app.models.run import (
     PhaseName,
     ProductMarketContext,
     ReservationPrices,
+    RunEvent,
+    RunEventLog,
+    RunEventType,
     RunRecord,
     RunStatus,
     ToolCallEvent,
@@ -28,7 +31,8 @@ from backend.app.models.simulation import (
     SimulationTestPipelineResult,
 )
 from backend.app.models.simulation_request import SimulationRunConfig, SimulationSeedRequest
-from backend.app.services.export_repository import save_simulation_export
+from backend.app.services.event_repository import save_run_event_log
+from backend.app.services.export_repository import save_simulation_export_bundle
 from backend.app.services.run_repository import save_run_record
 
 
@@ -36,144 +40,423 @@ class SimulationExecutionError(Exception):
     pass
 
 
+class RunEventCollector:
+    def __init__(self, run_id: str, created_at) -> None:
+        self.run_id = run_id
+        self.created_at = created_at
+        self.events: list[RunEvent] = []
+
+    def log(
+        self,
+        *,
+        event_type: RunEventType,
+        timestamp=None,
+        phase: PhaseName | None = None,
+        round_number: int | None = None,
+        agent: str | None = None,
+        observed_market_price: float | None = None,
+        offer_price: float | None = None,
+        action: str | None = None,
+        status: str | None = None,
+        note: str | None = None,
+        reasoning_summary: str | None = None,
+        negotiation_id: str | None = None,
+        tool_name: str | None = None,
+    ) -> None:
+        self.events.append(
+            RunEvent(
+                run_id=self.run_id,
+                timestamp=timestamp or utc_now(),
+                phase=phase,
+                round=round_number,
+                agent=agent,
+                event_type=event_type,
+                observed_market_price=observed_market_price,
+                offer_price=offer_price,
+                action=action,
+                status=status,
+                note=note,
+                reasoning_summary=reasoning_summary,
+                negotiation_id=negotiation_id,
+                tool_name=tool_name,
+            )
+        )
+
+    def build_log(self) -> RunEventLog:
+        updated_at = self.events[-1].timestamp if self.events else self.created_at
+        return RunEventLog(
+            run_id=self.run_id,
+            created_at=self.created_at,
+            updated_at=updated_at,
+            events=self.events,
+        )
+
+
+class SimulationRunExecutionResult:
+    def __init__(
+        self,
+        *,
+        run: RunRecord,
+        event_log: RunEventLog,
+        trace_id: str | None,
+        trace_url: str | None,
+        export_paths: dict[str, str] | None = None,
+        failure_point: dict | None = None,
+        failure_type: str | None = None,
+    ) -> None:
+        self.run = run
+        self.event_log = event_log
+        self.trace_id = trace_id
+        self.trace_url = trace_url
+        self.export_paths = export_paths
+        self.failure_point = failure_point
+        self.failure_type = failure_type
+
+
 def simulate_run(request: SimulationRunConfig | None) -> RunRecord:
+    return _execute_simulation_run(request).run
+
+
+def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRunExecutionResult:
     if request is None:
         raise SimulationExecutionError("Simulation input is required.")
 
     simulation_request = request
     created_at = utc_now()
-    settings = get_settings()
-    openai_wrapper = OpenAIClientWrapper(settings)
-    openai_configured, openai_available, openai_message = openai_wrapper.get_status()
-    if not openai_configured or not openai_available:
-        raise SimulationExecutionError(openai_message)
-
     run_id = f"run-{uuid4().hex[:10]}"
-    supplier = Agent(
-        id="supplier",
-        name="Supplier",
-        role=AgentRole.SUPPLIER,
-        objective="Sell above the supplier reservation price while keeping volume committed.",
-        reservation_prices=ReservationPrices(
-            min_sell_price=simulation_request.supplier_min_sell_price
-        ),
-    )
-    manufacturer = Agent(
-        id="manufacturer",
-        name="Manufacturer",
-        role=AgentRole.MANUFACTURER,
-        objective="Buy below the procurement ceiling and preserve downstream margin.",
-        reservation_prices=ReservationPrices(
-            min_sell_price=simulation_request.manufacturer_min_sell_price,
-            max_buy_price=simulation_request.manufacturer_max_buy_price,
-        ),
-    )
-    retailer = Agent(
-        id="retailer",
-        name="Retailer",
-        role=AgentRole.RETAILER,
-        objective="Buy enough units without exceeding the retail reservation price.",
-        reservation_prices=ReservationPrices(
-            max_buy_price=simulation_request.retailer_max_buy_price
-        ),
-    )
-    phases = _build_phases()
-    product_context = ProductMarketContext(
-        product_name=simulation_request.product_name,
-        product_category=simulation_request.product_category,
-        market_region=simulation_request.market_region,
-        baseline_unit_price=simulation_request.baseline_unit_price,
-        target_quantity=simulation_request.target_quantity,
-        currency=simulation_request.currency,
-        demand_signal=simulation_request.demand_signal,
-        supply_signal=simulation_request.supply_signal,
+    event_collector = RunEventCollector(run_id=run_id, created_at=created_at)
+    settings = get_settings()
+    langfuse_wrapper = LangfuseTraceWrapper(settings)
+    trace_id: str | None = None
+    trace_url: str | None = None
+    event_collector.log(
+        event_type=RunEventType.RUN_START,
+        timestamp=created_at,
+        status=RunStatus.RUNNING.value,
+        note=f"Starting {simulation_request.title}.",
     )
 
-    first_result = _simulate_negotiation(
-        openai_wrapper=openai_wrapper,
-        phase=PhaseName.SUPPLIER_MANUFACTURER,
-        label="Supplier to Manufacturer",
-        product_name=simulation_request.product_name,
-        seller=supplier,
-        buyer=manufacturer,
-        min_sell_price=simulation_request.supplier_min_sell_price,
-        max_buy_price=simulation_request.manufacturer_max_buy_price,
-        quantity=simulation_request.target_quantity,
-        max_rounds=simulation_request.max_rounds_per_negotiation,
-        step_index_start=1,
-        dependency_note="Initial upstream procurement negotiation.",
-    )
-    second_result: NegotiationSimulationResult | None = None
-    manufacturer_cost_basis: float | None = None
-    manufacturer_sell_floor: float | None = None
+    with langfuse_wrapper.start_span(
+        name="simulation-run",
+        input={
+            "title": simulation_request.title,
+            "product_name": simulation_request.product_name,
+            "product_category": simulation_request.product_category,
+            "market_region": simulation_request.market_region,
+            "target_quantity": simulation_request.target_quantity,
+            "max_rounds_per_negotiation": simulation_request.max_rounds_per_negotiation,
+        },
+        metadata={
+            "run_id": run_id,
+            "component": "simulation",
+        },
+        status_message="Simulation run started.",
+    ) as run_trace:
+        openai_wrapper = OpenAIClientWrapper(settings)
+        openai_configured, openai_available, openai_message = openai_wrapper.get_status()
+        trace_id = langfuse_wrapper.get_current_trace_id()
+        trace_url = langfuse_wrapper.get_trace_url(trace_id=trace_id)
+        try:
+            if not openai_configured or not openai_available:
+                raise SimulationExecutionError(openai_message)
 
-    if (
-        first_result.record.status == NegotiationStatus.ACCEPTED
-        and first_result.record.final_price is not None
-    ):
-        manufacturer_cost_basis = first_result.record.final_price
-        manufacturer_sell_floor = max(
-            simulation_request.manufacturer_min_sell_price,
-            round(
-                manufacturer_cost_basis + simulation_request.manufacturer_margin_floor,
-                2,
-            ),
-        )
+            supplier = Agent(
+                id="supplier",
+                name="Supplier",
+                role=AgentRole.SUPPLIER,
+                objective="Sell above the supplier reservation price while keeping volume committed.",
+                reservation_prices=ReservationPrices(
+                    min_sell_price=simulation_request.supplier_min_sell_price
+                ),
+            )
+            manufacturer = Agent(
+                id="manufacturer",
+                name="Manufacturer",
+                role=AgentRole.MANUFACTURER,
+                objective="Buy below the procurement ceiling and preserve downstream margin.",
+                reservation_prices=ReservationPrices(
+                    min_sell_price=simulation_request.manufacturer_min_sell_price,
+                    max_buy_price=simulation_request.manufacturer_max_buy_price,
+                ),
+            )
+            retailer = Agent(
+                id="retailer",
+                name="Retailer",
+                role=AgentRole.RETAILER,
+                objective="Buy enough units without exceeding the retail reservation price.",
+                reservation_prices=ReservationPrices(
+                    max_buy_price=simulation_request.retailer_max_buy_price
+                ),
+            )
+            phases = _build_phases()
+            product_context = ProductMarketContext(
+                product_name=simulation_request.product_name,
+                product_category=simulation_request.product_category,
+                market_region=simulation_request.market_region,
+                baseline_unit_price=simulation_request.baseline_unit_price,
+                target_quantity=simulation_request.target_quantity,
+                currency=simulation_request.currency,
+                demand_signal=simulation_request.demand_signal,
+                supply_signal=simulation_request.supply_signal,
+            )
 
-        second_result = _simulate_negotiation(
-            openai_wrapper=openai_wrapper,
-            phase=PhaseName.MANUFACTURER_RETAILER,
-            label="Manufacturer to Retailer",
-            product_name=simulation_request.product_name,
-            seller=manufacturer,
-            buyer=retailer,
-            min_sell_price=manufacturer_sell_floor,
-            max_buy_price=simulation_request.retailer_max_buy_price,
-            quantity=simulation_request.target_quantity,
-            max_rounds=simulation_request.max_rounds_per_negotiation,
-            step_index_start=len(first_result.steps) + 1,
-            dependency_note=(
-                "Manufacturer sell floor uses the accepted upstream deal as its cost basis."
-            ),
-        )
+            event_collector.log(
+                event_type=RunEventType.PHASE_START,
+                phase=PhaseName.SUPPLIER_MANUFACTURER,
+                status=NegotiationStatus.OPEN.value,
+                note="Initial upstream procurement negotiation started.",
+            )
+            with langfuse_wrapper.start_span(
+                name="negotiation-phase",
+                input={
+                    "phase": PhaseName.SUPPLIER_MANUFACTURER.value,
+                    "seller_id": supplier.id,
+                    "buyer_id": manufacturer.id,
+                    "min_sell_price": simulation_request.supplier_min_sell_price,
+                    "max_buy_price": simulation_request.manufacturer_max_buy_price,
+                    "quantity": simulation_request.target_quantity,
+                    "max_rounds": simulation_request.max_rounds_per_negotiation,
+                },
+                metadata={
+                    "run_id": run_id,
+                    "phase": PhaseName.SUPPLIER_MANUFACTURER.value,
+                    "phase_label": "Supplier to Manufacturer",
+                },
+                status_message="Negotiation phase started.",
+            ) as first_phase_trace:
+                first_result = _simulate_negotiation(
+                    openai_wrapper=openai_wrapper,
+                    langfuse_wrapper=langfuse_wrapper,
+                    run_id=run_id,
+                    phase=PhaseName.SUPPLIER_MANUFACTURER,
+                    label="Supplier to Manufacturer",
+                    product_name=simulation_request.product_name,
+                    seller=supplier,
+                    buyer=manufacturer,
+                    min_sell_price=simulation_request.supplier_min_sell_price,
+                    max_buy_price=simulation_request.manufacturer_max_buy_price,
+                    quantity=simulation_request.target_quantity,
+                    max_rounds=simulation_request.max_rounds_per_negotiation,
+                    step_index_start=1,
+                    dependency_note="Initial upstream procurement negotiation.",
+                    event_collector=event_collector,
+                )
+                first_phase_trace.update(
+                    output={
+                        "status": first_result.record.status.value,
+                        "rounds_completed": first_result.record.rounds_completed,
+                        "final_price": first_result.record.final_price,
+                    },
+                    status_message=first_result.record.outcome_summary,
+                )
+            event_collector.log(
+                event_type=RunEventType.PHASE_END,
+                phase=first_result.record.phase,
+                round_number=first_result.record.rounds_completed,
+                status=first_result.record.status.value,
+                offer_price=first_result.record.final_price,
+                negotiation_id=first_result.record.id,
+                note=first_result.record.outcome_summary,
+            )
 
-    negotiations = [first_result.record]
-    all_steps = [*first_result.steps]
-    if second_result is not None:
-        negotiations.append(second_result.record)
-        all_steps.extend(second_result.steps)
+            second_result: NegotiationSimulationResult | None = None
+            manufacturer_cost_basis: float | None = None
+            manufacturer_sell_floor: float | None = None
 
-    status = _resolve_run_status(negotiations)
-    diagnosis = _build_diagnosis(
-        first_negotiation=first_result.record,
-        second_negotiation=second_result.record if second_result else None,
-        manufacturer_sell_floor=manufacturer_sell_floor,
-        manufacturer_cost_basis=manufacturer_cost_basis,
-        currency=simulation_request.currency,
-    )
+            if (
+                first_result.record.status == NegotiationStatus.ACCEPTED
+                and first_result.record.final_price is not None
+            ):
+                manufacturer_cost_basis = first_result.record.final_price
+                manufacturer_sell_floor = max(
+                    simulation_request.manufacturer_min_sell_price,
+                    round(
+                        manufacturer_cost_basis + simulation_request.manufacturer_margin_floor,
+                        2,
+                    ),
+                )
 
-    run = RunRecord(
-        id=run_id,
-        title=simulation_request.title,
-        status=status,
-        scenario=(
-            f"{simulation_request.product_name} in {simulation_request.market_region}. "
-            f"Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation."
-        ),
-        created_at=created_at,
-        updated_at=utc_now(),
-        product_context=product_context,
-        agents=[supplier, manufacturer, retailer],
-        phases=phases,
-        steps=all_steps,
-        negotiations=negotiations,
-        diagnosis=diagnosis,
-        max_rounds_per_negotiation=simulation_request.max_rounds_per_negotiation,
-        notes="Backend simulation with linked upstream and downstream negotiations.",
-        tags=["simulation", "supply-chain"],
-    )
-    save_run_record(run)
-    return run
+                event_collector.log(
+                    event_type=RunEventType.PHASE_START,
+                    phase=PhaseName.MANUFACTURER_RETAILER,
+                    status=NegotiationStatus.OPEN.value,
+                    offer_price=manufacturer_sell_floor,
+                    note=(
+                        "Downstream negotiation started with the accepted upstream deal as cost basis."
+                    ),
+                )
+                with langfuse_wrapper.start_span(
+                    name="negotiation-phase",
+                    input={
+                        "phase": PhaseName.MANUFACTURER_RETAILER.value,
+                        "seller_id": manufacturer.id,
+                        "buyer_id": retailer.id,
+                        "min_sell_price": manufacturer_sell_floor,
+                        "max_buy_price": simulation_request.retailer_max_buy_price,
+                        "quantity": simulation_request.target_quantity,
+                        "max_rounds": simulation_request.max_rounds_per_negotiation,
+                        "manufacturer_cost_basis": manufacturer_cost_basis,
+                    },
+                    metadata={
+                        "run_id": run_id,
+                        "phase": PhaseName.MANUFACTURER_RETAILER.value,
+                        "phase_label": "Manufacturer to Retailer",
+                    },
+                    status_message="Negotiation phase started.",
+                ) as second_phase_trace:
+                    second_result = _simulate_negotiation(
+                        openai_wrapper=openai_wrapper,
+                        langfuse_wrapper=langfuse_wrapper,
+                        run_id=run_id,
+                        phase=PhaseName.MANUFACTURER_RETAILER,
+                        label="Manufacturer to Retailer",
+                        product_name=simulation_request.product_name,
+                        seller=manufacturer,
+                        buyer=retailer,
+                        min_sell_price=manufacturer_sell_floor,
+                        max_buy_price=simulation_request.retailer_max_buy_price,
+                        quantity=simulation_request.target_quantity,
+                        max_rounds=simulation_request.max_rounds_per_negotiation,
+                        step_index_start=len(first_result.steps) + 1,
+                        dependency_note=(
+                            "Manufacturer sell floor uses the accepted upstream deal as its cost basis."
+                        ),
+                        event_collector=event_collector,
+                    )
+                    second_phase_trace.update(
+                        output={
+                            "status": second_result.record.status.value,
+                            "rounds_completed": second_result.record.rounds_completed,
+                            "final_price": second_result.record.final_price,
+                        },
+                        status_message=second_result.record.outcome_summary,
+                    )
+                event_collector.log(
+                    event_type=RunEventType.PHASE_END,
+                    phase=second_result.record.phase,
+                    round_number=second_result.record.rounds_completed,
+                    status=second_result.record.status.value,
+                    offer_price=second_result.record.final_price,
+                    negotiation_id=second_result.record.id,
+                    note=second_result.record.outcome_summary,
+                )
+
+            negotiations = [first_result.record]
+            all_steps = [*first_result.steps]
+            if second_result is not None:
+                negotiations.append(second_result.record)
+                all_steps.extend(second_result.steps)
+
+            status = _resolve_run_status(negotiations)
+            diagnosis = _build_diagnosis(
+                first_negotiation=first_result.record,
+                second_negotiation=second_result.record if second_result else None,
+                manufacturer_sell_floor=manufacturer_sell_floor,
+                manufacturer_cost_basis=manufacturer_cost_basis,
+                currency=simulation_request.currency,
+            )
+
+            event_collector.log(
+                event_type=RunEventType.FINAL_OUTCOME,
+                status=status.value,
+                note=diagnosis.outcome,
+                reasoning_summary=diagnosis.chain_effect,
+            )
+
+            run = RunRecord(
+                id=run_id,
+                title=simulation_request.title,
+                status=status,
+                scenario=(
+                    f"{simulation_request.product_name} in {simulation_request.market_region}. "
+                    f"Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation."
+                ),
+                created_at=created_at,
+                updated_at=utc_now(),
+                product_context=product_context,
+                agents=[supplier, manufacturer, retailer],
+                phases=phases,
+                steps=all_steps,
+                negotiations=negotiations,
+                diagnosis=diagnosis,
+                max_rounds_per_negotiation=simulation_request.max_rounds_per_negotiation,
+                notes="Backend simulation with linked upstream and downstream negotiations.",
+                tags=["simulation", "supply-chain"],
+            )
+            save_run_record(run)
+            event_collector.log(
+                event_type=RunEventType.RUN_END,
+                status=status.value,
+                note="Run record and event log persisted.",
+            )
+            event_log = event_collector.build_log()
+            save_run_event_log(settings.events_dir, event_log)
+            langfuse_configured, langfuse_available, langfuse_message = langfuse_wrapper.get_status()
+            export_paths = save_simulation_export_bundle(
+                exports_dir=settings.exports_dir,
+                run_id=run.id,
+                summary_payload=_build_export_summary_payload(
+                    run=run,
+                    event_log=event_log,
+                    trace_id=trace_id,
+                    trace_url=trace_url,
+                ),
+                event_log_payload=event_log.model_dump(mode="json"),
+                trace_payload=_build_trace_export_payload(
+                    run=run,
+                    trace_id=trace_id,
+                    trace_url=trace_url,
+                    langfuse_status=langfuse_message,
+                    langfuse_available=langfuse_available,
+                    langfuse_configured=langfuse_configured,
+                ),
+                conversation_payload=_build_conversation_export_payload(run=run),
+            )
+            run_trace.update(
+                output={
+                    "run_id": run.id,
+                    "status": run.status.value,
+                    "negotiations": [record.model_dump(mode="json") for record in run.negotiations],
+                    "diagnosis": run.diagnosis.model_dump(mode="json"),
+                },
+                metadata={
+                    "run_id": run_id,
+                    "trace_url": trace_url,
+                },
+                status_message="Simulation run completed.",
+            )
+            langfuse_wrapper.flush()
+            return SimulationRunExecutionResult(
+                run=run,
+                event_log=event_log,
+                trace_id=trace_id,
+                trace_url=trace_url,
+                export_paths={key: str(value) for key, value in export_paths.items()},
+                failure_point=None,
+                failure_type=None,
+            )
+        except Exception as exc:
+            event_collector.log(
+                event_type=RunEventType.FINAL_OUTCOME,
+                status=RunStatus.FAILED.value,
+                note=str(exc),
+            )
+            event_collector.log(
+                event_type=RunEventType.RUN_END,
+                status=RunStatus.FAILED.value,
+                note="Run ended with an error before completion.",
+                reasoning_summary=str(exc),
+            )
+            event_log = event_collector.build_log()
+            save_run_event_log(settings.events_dir, event_log)
+            run_trace.update(
+                output={"error": str(exc), "run_id": run_id},
+                metadata={"run_id": run_id, "trace_url": trace_url},
+                status_message=str(exc),
+                level="ERROR",
+            )
+            langfuse_wrapper.flush()
+            raise
 
 
 def run_seeded_simulations(request: SimulationSeedRequest) -> SimulationBatchResult:
@@ -192,8 +475,11 @@ def run_test_pipeline(request: SimulationSeedRequest | None = None) -> Simulatio
     try:
         if request is None:
             raise SimulationExecutionError("Seed input is required.")
-        batch = run_seeded_simulations(request)
-        run = batch.runs[0]
+        batch_requests = _build_seeded_requests(request.seed)
+        first_execution = _execute_simulation_run(batch_requests[0])
+        run = first_execution.run
+        for item in batch_requests[1:]:
+            simulate_run(item)
     except SimulationExecutionError as exc:
         return SimulationTestPipelineResult(
             success=False,
@@ -216,18 +502,15 @@ def run_test_pipeline(request: SimulationSeedRequest | None = None) -> Simulatio
 
     events.append(f"Simulated run {run.id} and persisted it to local storage.")
 
-    trace_id = langfuse_wrapper.create_trace_reference(run.id)
+    trace_id = first_execution.trace_id
     if trace_id:
         events.append(f"Initialized trace {trace_id}.")
     else:
         events.append("Skipped trace initialization because Langfuse is unavailable.")
 
-    export_path = save_simulation_export(
-        exports_dir=settings.exports_dir,
-        run_id=run.id,
-        payload=_build_export_payload(run=run, trace_id=trace_id),
-    )
-    events.append(f"Saved simulation export to {export_path.name}.")
+    export_paths = first_execution.export_paths or {}
+    if export_paths.get("summary"):
+        events.append(f"Saved simulation export bundle to {run.id}.")
 
     success = True
     message = "Simulation pipeline completed."
@@ -242,8 +525,11 @@ def run_test_pipeline(request: SimulationSeedRequest | None = None) -> Simulatio
         run_id=run.id,
         trace_id=trace_id,
         export=PipelineExportRecord(
-            file_path=str(export_path),
+            file_path=export_paths.get("summary", ""),
             created_at=run.updated_at,
+            event_log_path=export_paths.get("event_log"),
+            trace_path=export_paths.get("trace"),
+            conversation_path=export_paths.get("conversation"),
         ),
         openai=PipelineDependencyStatus(
             configured=openai_configured,
@@ -265,11 +551,103 @@ class NegotiationSimulationResult:
         self.steps = steps
 
 
+def _log_tool_events(
+    event_collector: RunEventCollector,
+    langfuse_wrapper: LangfuseTraceWrapper,
+    run_id: str,
+    phase: PhaseName,
+    round_number: int,
+    negotiation_id: str,
+    agent_id: str,
+    tool_calls: list[ToolCallEvent],
+    status: str,
+) -> None:
+    for tool_call in tool_calls:
+        observed_market_price = tool_call.arguments.get("observed_market_price")
+        market_price = (
+            float(observed_market_price)
+            if isinstance(observed_market_price, (int, float))
+            else None
+        )
+        with langfuse_wrapper.start_tool(
+            name=tool_call.tool_name,
+            input=tool_call.arguments,
+            output={
+                "result_summary": tool_call.result_summary,
+                "observed_market_price": market_price,
+            },
+            metadata={
+                "run_id": run_id,
+                "phase": phase.value,
+                "round": round_number,
+                "agent_id": agent_id,
+                "negotiation_id": negotiation_id,
+            },
+            status_message=tool_call.result_summary,
+        ):
+            pass
+        event_collector.log(
+            event_type=RunEventType.TOOL_CALL,
+            timestamp=tool_call.created_at,
+            phase=phase,
+            round_number=round_number,
+            agent=agent_id,
+            action=tool_call.tool_name,
+            status=status,
+            note=tool_call.result_summary,
+            negotiation_id=negotiation_id,
+            tool_name=tool_call.tool_name,
+            observed_market_price=market_price,
+        )
+        if tool_call.tool_name == "check_market_price":
+            event_collector.log(
+                event_type=RunEventType.MARKET_PRICE_CHECK,
+                timestamp=tool_call.created_at,
+                phase=phase,
+                round_number=round_number,
+                agent=agent_id,
+                status=status,
+                note=tool_call.result_summary,
+                negotiation_id=negotiation_id,
+                tool_name=tool_call.tool_name,
+                observed_market_price=market_price,
+            )
+
+
+def _log_offer_received_event(
+    event_collector: RunEventCollector,
+    *,
+    phase: PhaseName,
+    round_number: int,
+    negotiation_id: str,
+    delivered_message: dict | None,
+    recipient_agent_id: str,
+    status: str,
+) -> None:
+    if not delivered_message or delivered_message.get("type") != "offer":
+        return
+
+    event_collector.log(
+        event_type=RunEventType.OFFER_RECEIVED,
+        phase=phase,
+        round_number=round_number,
+        agent=recipient_agent_id,
+        offer_price=_coerce_price(delivered_message.get("price")),
+        action=delivered_message.get("type"),
+        status=status,
+        note=delivered_message.get("note"),
+        negotiation_id=negotiation_id,
+    )
+
+
 def _simulate_negotiation(
     phase: PhaseName,
     label: str,
     product_name: str,
     openai_wrapper: OpenAIClientWrapper,
+    langfuse_wrapper: LangfuseTraceWrapper,
+    run_id: str,
+    event_collector: RunEventCollector,
     seller: Agent,
     buyer: Agent,
     min_sell_price: float,
@@ -291,6 +669,49 @@ def _simulate_negotiation(
 
     if max_buy_price < min_sell_price:
         now = utc_now()
+        seller_tool_calls = [
+            _review_state_event(
+                agent_id=seller.id,
+                step_index=step_index,
+                phase=phase,
+                negotiation_id=negotiation_id,
+                round_number=1,
+                delivered_message=None,
+            ),
+            _market_check_event(
+                agent_id=seller.id,
+                step_index=step_index,
+                negotiation_id=negotiation_id,
+                product_name=product_name,
+                baseline_price=min_sell_price,
+                role=seller.role,
+                round_number=1,
+            ),
+        ]
+        event_collector.log(
+            event_type=RunEventType.AGENT_TURN,
+            timestamp=now,
+            phase=phase,
+            round_number=1,
+            agent=seller.id,
+            action="make_offer",
+            status=NegotiationStatus.OPEN.value,
+            offer_price=min_sell_price,
+            note=f"{seller.name} opens at {min_sell_price:.2f}.",
+            reasoning_summary="Seller anchors at its minimum acceptable price.",
+            negotiation_id=negotiation_id,
+        )
+        _log_tool_events(
+            event_collector=event_collector,
+            langfuse_wrapper=langfuse_wrapper,
+            run_id=run_id,
+            phase=phase,
+            round_number=1,
+            negotiation_id=negotiation_id,
+            agent_id=seller.id,
+            tool_calls=seller_tool_calls,
+            status=NegotiationStatus.OPEN.value,
+        )
         steps.append(
             NegotiationStep(
                 index=step_index,
@@ -302,29 +723,82 @@ def _simulate_negotiation(
                 proposed_price=min_sell_price,
                 message=f"{seller.name} opens at {min_sell_price:.2f}.",
                 outcome="Seller anchors at its minimum acceptable price.",
+                delivered_message=None,
                 created_at=now,
-                tool_calls=[
-                    _review_state_event(
-                        agent_id=seller.id,
-                        step_index=step_index,
-                        phase=phase,
-                        negotiation_id=negotiation_id,
-                        round_number=1,
-                        delivered_message=None,
-                    ),
-                    _market_check_event(
-                        agent_id=seller.id,
-                        step_index=step_index,
-                        negotiation_id=negotiation_id,
-                        product_name=product_name,
-                        baseline_price=min_sell_price,
-                        role=seller.role,
-                        round_number=1,
-                    ),
-                ],
+                tool_calls=seller_tool_calls,
             )
         )
+        event_collector.log(
+            event_type=RunEventType.OFFER_MADE,
+            timestamp=now,
+            phase=phase,
+            round_number=1,
+            agent=seller.id,
+            offer_price=min_sell_price,
+            action="make_offer",
+            status=NegotiationStatus.OPEN.value,
+            note=f"{seller.name} opens at {min_sell_price:.2f}.",
+            negotiation_id=negotiation_id,
+        )
         step_index += 1
+        buyer_message = {
+            "type": "offer",
+            "price": min_sell_price,
+            "note": f"{seller.name} opens at {min_sell_price:.2f}.",
+        }
+        _log_offer_received_event(
+            event_collector,
+            phase=phase,
+            round_number=1,
+            negotiation_id=negotiation_id,
+            delivered_message=buyer_message,
+            recipient_agent_id=buyer.id,
+            status=NegotiationStatus.OPEN.value,
+        )
+        buyer_tool_calls = [
+            _review_state_event(
+                agent_id=buyer.id,
+                step_index=step_index,
+                phase=phase,
+                negotiation_id=negotiation_id,
+                round_number=1,
+                delivered_message=buyer_message,
+            ),
+            _market_check_event(
+                agent_id=buyer.id,
+                step_index=step_index,
+                negotiation_id=negotiation_id,
+                product_name=product_name,
+                baseline_price=max_buy_price,
+                role=buyer.role,
+                round_number=1,
+            ),
+        ]
+        buyer_note = f"{buyer.name} rejects because its ceiling is {max_buy_price:.2f}."
+        rejection_summary = "Negotiation ends immediately due to non-overlapping reservation prices."
+        event_collector.log(
+            event_type=RunEventType.AGENT_TURN,
+            phase=phase,
+            round_number=1,
+            agent=buyer.id,
+            action="reject_offer",
+            status=NegotiationStatus.REJECTED.value,
+            offer_price=min_sell_price,
+            note=buyer_note,
+            reasoning_summary=rejection_summary,
+            negotiation_id=negotiation_id,
+        )
+        _log_tool_events(
+            event_collector=event_collector,
+            langfuse_wrapper=langfuse_wrapper,
+            run_id=run_id,
+            phase=phase,
+            round_number=1,
+            negotiation_id=negotiation_id,
+            agent_id=buyer.id,
+            tool_calls=buyer_tool_calls,
+            status=NegotiationStatus.REJECTED.value,
+        )
         steps.append(
             NegotiationStep(
                 index=step_index,
@@ -334,33 +808,24 @@ def _simulate_negotiation(
                 agent_id=buyer.id,
                 kind="reject",
                 proposed_price=max_buy_price,
-                message=f"{buyer.name} rejects because its ceiling is {max_buy_price:.2f}.",
-                outcome="Negotiation ends immediately due to non-overlapping reservation prices.",
+                message=buyer_note,
+                outcome=rejection_summary,
+                delivered_message=buyer_message,
                 created_at=utc_now(),
-                tool_calls=[
-                    _review_state_event(
-                        agent_id=buyer.id,
-                        step_index=step_index,
-                        phase=phase,
-                        negotiation_id=negotiation_id,
-                        round_number=1,
-                        delivered_message={
-                            "type": "offer",
-                            "price": min_sell_price,
-                            "note": f"{seller.name} opens at {min_sell_price:.2f}.",
-                        },
-                    ),
-                    _market_check_event(
-                        agent_id=buyer.id,
-                        step_index=step_index,
-                        negotiation_id=negotiation_id,
-                        product_name=product_name,
-                        baseline_price=max_buy_price,
-                        role=buyer.role,
-                        round_number=1,
-                    ),
-                ],
+                tool_calls=buyer_tool_calls,
             )
+        )
+        event_collector.log(
+            event_type=RunEventType.REJECT,
+            phase=phase,
+            round_number=1,
+            agent=buyer.id,
+            offer_price=min_sell_price,
+            action="reject_offer",
+            status=NegotiationStatus.REJECTED.value,
+            note=buyer_note,
+            reasoning_summary=rejection_summary,
+            negotiation_id=negotiation_id,
         )
         return NegotiationSimulationResult(
             record=NegotiationRecord(
@@ -385,12 +850,15 @@ def _simulate_negotiation(
         round_number = (turn_index // 2) + 1
         rounds_completed = round_number
         current_agent = seller if turn_index % 2 == 0 else buyer
-        current_floor = min_sell_price if current_agent.id == seller.id else manufacturer_floor_if_applicable(
-            seller=current_agent,
-            fallback=min_sell_price,
+        _log_offer_received_event(
+            event_collector,
+            phase=phase,
+            round_number=round_number,
+            negotiation_id=negotiation_id,
+            delivered_message=delivered_message,
+            recipient_agent_id=current_agent.id,
+            status=status.value,
         )
-        current_ceiling = max_buy_price
-
         tool_calls = [
             _review_state_event(
                 agent_id=current_agent.id,
@@ -410,9 +878,24 @@ def _simulate_negotiation(
                 round_number=round_number,
             ),
         ]
+        _log_tool_events(
+            event_collector=event_collector,
+            langfuse_wrapper=langfuse_wrapper,
+            run_id=run_id,
+            phase=phase,
+            round_number=round_number,
+            negotiation_id=negotiation_id,
+            agent_id=current_agent.id,
+            tool_calls=tool_calls,
+            status=status.value,
+        )
 
         action = _decide_agent_action(
             openai_wrapper=openai_wrapper,
+            langfuse_wrapper=langfuse_wrapper,
+            run_id=run_id,
+            phase=phase,
+            negotiation_id=negotiation_id,
             agent=current_agent,
             seller=seller,
             buyer=buyer,
@@ -430,6 +913,19 @@ def _simulate_negotiation(
         reason = action.get("reason", "").strip()
         proposed_price = _coerce_price(action.get("price"))
         now = utc_now()
+        event_collector.log(
+            event_type=RunEventType.AGENT_TURN,
+            timestamp=now,
+            phase=phase,
+            round_number=round_number,
+            agent=current_agent.id,
+            action=kind,
+            status=status.value,
+            offer_price=proposed_price,
+            note=note or reason or f"{current_agent.name} evaluated the current state.",
+            reasoning_summary=reason or None,
+            negotiation_id=negotiation_id,
+        )
 
         if kind == "make_offer":
             if current_agent.id == seller.id:
@@ -464,6 +960,7 @@ def _simulate_negotiation(
                     message=message,
                     outcome=outcome,
                     proposed_price=proposed_price,
+                    delivered_message=delivered_message,
                     created_at=now,
                     tool_calls=tool_calls,
                 )
@@ -474,6 +971,19 @@ def _simulate_negotiation(
                 "note": message,
                 "from_agent_id": current_agent.id,
             }
+            event_collector.log(
+                event_type=RunEventType.OFFER_MADE,
+                timestamp=now,
+                phase=phase,
+                round_number=round_number,
+                agent=current_agent.id,
+                offer_price=proposed_price,
+                action=kind,
+                status=status.value,
+                note=message,
+                reasoning_summary=reason or None,
+                negotiation_id=negotiation_id,
+            )
             step_index += 1
         elif kind == "accept_offer" and delivered_message and delivered_message.get("type") == "offer":
             final_price = float(delivered_message["price"])
@@ -488,11 +998,25 @@ def _simulate_negotiation(
                     message=note or f"{current_agent.name} accepts the pending offer.",
                     outcome="Negotiation ends with an accepted deal.",
                     proposed_price=final_price,
+                    delivered_message=delivered_message,
                     created_at=now,
                     tool_calls=tool_calls,
                 )
             )
             status = NegotiationStatus.ACCEPTED
+            event_collector.log(
+                event_type=RunEventType.ACCEPT,
+                timestamp=now,
+                phase=phase,
+                round_number=round_number,
+                agent=current_agent.id,
+                offer_price=final_price,
+                action=kind,
+                status=status.value,
+                note=note or f"{current_agent.name} accepts the pending offer.",
+                reasoning_summary=reason or None,
+                negotiation_id=negotiation_id,
+            )
             step_index += 1
             break
         elif kind == "reject_offer":
@@ -507,11 +1031,25 @@ def _simulate_negotiation(
                     message=reason or f"{current_agent.name} rejects the pending offer.",
                     outcome="Negotiation ends with a rejection.",
                     proposed_price=delivered_message.get("price") if delivered_message else None,
+                    delivered_message=delivered_message,
                     created_at=now,
                     tool_calls=tool_calls,
                 )
             )
             status = NegotiationStatus.REJECTED
+            event_collector.log(
+                event_type=RunEventType.REJECT,
+                timestamp=now,
+                phase=phase,
+                round_number=round_number,
+                agent=current_agent.id,
+                offer_price=_coerce_price(delivered_message.get("price")) if delivered_message else None,
+                action=kind,
+                status=status.value,
+                note=reason or f"{current_agent.name} rejects the pending offer.",
+                reasoning_summary=reason or None,
+                negotiation_id=negotiation_id,
+            )
             step_index += 1
             break
         else:
@@ -549,6 +1087,7 @@ def _simulate_negotiation(
                     message=message,
                     outcome="Fallback offer queued for delivery on the next turn.",
                     proposed_price=fallback_price,
+                    delivered_message=delivered_message,
                     created_at=now,
                     tool_calls=tool_calls,
                 )
@@ -559,9 +1098,23 @@ def _simulate_negotiation(
                 "note": message,
                 "from_agent_id": current_agent.id,
             }
+            event_collector.log(
+                event_type=RunEventType.OFFER_MADE,
+                timestamp=now,
+                phase=phase,
+                round_number=round_number,
+                agent=current_agent.id,
+                offer_price=fallback_price,
+                action="make_offer",
+                status=status.value,
+                note=message,
+                reasoning_summary="Fallback offer was used because the decision payload was incomplete.",
+                negotiation_id=negotiation_id,
+            )
             step_index += 1
 
     if status == NegotiationStatus.OPEN:
+        timeout_timestamp = utc_now()
         status = NegotiationStatus.TIMEOUT
         steps.append(
             NegotiationStep(
@@ -574,8 +1127,21 @@ def _simulate_negotiation(
                 message=f"{label} reached the round limit without agreement.",
                 outcome="Negotiation times out.",
                 proposed_price=None,
-                created_at=utc_now(),
+                delivered_message=delivered_message,
+                created_at=timeout_timestamp,
             )
+        )
+        event_collector.log(
+            event_type=RunEventType.TIMEOUT,
+            timestamp=timeout_timestamp,
+            phase=phase,
+            round_number=rounds_completed,
+            agent=buyer.id,
+            action="timeout",
+            status=status.value,
+            note=f"{label} reached the round limit without agreement.",
+            reasoning_summary="Negotiation timed out after exhausting the configured round limit.",
+            negotiation_id=negotiation_id,
         )
 
     opening_seller_offer = next(
@@ -697,16 +1263,206 @@ def _build_diagnosis(
     )
 
 
-def _build_export_payload(run: RunRecord, trace_id: str | None) -> dict:
+def _build_export_summary_payload(
+    run: RunRecord,
+    event_log: RunEventLog,
+    trace_id: str | None,
+    trace_url: str | None,
+) -> dict:
+    derived = _build_derived_export_fields(run=run, event_log=event_log)
     return {
         "run_id": run.id,
         "title": run.title,
         "status": run.status,
         "trace_id": trace_id,
+        "trace_url": trace_url,
         "scenario": run.scenario,
+        "run": run.model_dump(mode="json"),
         "negotiations": [negotiation.model_dump(mode="json") for negotiation in run.negotiations],
         "diagnosis": run.diagnosis.model_dump(mode="json"),
+        "derived": derived,
     }
+
+
+def _build_trace_export_payload(
+    run: RunRecord,
+    trace_id: str | None,
+    trace_url: str | None,
+    langfuse_status: str,
+    langfuse_available: bool,
+    langfuse_configured: bool,
+) -> dict:
+    return {
+        "run_id": run.id,
+        "trace_id": trace_id,
+        "trace_url": trace_url,
+        "langfuse_status": langfuse_status,
+        "langfuse_available": langfuse_available,
+        "langfuse_configured": langfuse_configured,
+        "trace_available": bool(trace_id),
+        "status": run.status,
+        "phase_statuses": [
+            {
+                "phase": negotiation.phase.value,
+                "status": negotiation.status.value,
+                "rounds_completed": negotiation.rounds_completed,
+                "final_price": negotiation.final_price,
+            }
+            for negotiation in run.negotiations
+        ],
+    }
+
+
+def _build_conversation_export_payload(run: RunRecord) -> dict:
+    agent_map = {agent.id: agent for agent in run.agents}
+    messages = []
+    for step in run.steps:
+        agent = agent_map.get(step.agent_id)
+        messages.append(
+            {
+                "index": step.index,
+                "timestamp": step.created_at.isoformat(),
+                "phase": step.phase.value,
+                "round": step.round_number,
+                "speaker_id": step.agent_id,
+                "speaker_name": agent.name if agent is not None else step.agent_id,
+                "speaker_role": agent.role.value if agent is not None else None,
+                "kind": step.kind,
+                "message": step.message,
+                "outcome": step.outcome,
+                "offer_price": step.proposed_price,
+                "delivered_message": (
+                    step.delivered_message.model_dump(mode="json")
+                    if step.delivered_message is not None
+                    else None
+                ),
+                "currency": run.product_context.currency,
+            }
+        )
+
+    return {
+        "run_id": run.id,
+        "title": run.title,
+        "status": run.status.value,
+        "messages": messages,
+    }
+
+
+def _build_derived_export_fields(run: RunRecord, event_log: RunEventLog) -> dict:
+    first_negotiation = run.negotiations[0] if run.negotiations else None
+    second_negotiation = run.negotiations[1] if len(run.negotiations) > 1 else None
+    manufacturer_margin_after_first_deal = None
+    if first_negotiation and first_negotiation.final_price is not None:
+        if second_negotiation and second_negotiation.final_price is not None:
+            manufacturer_margin_after_first_deal = round(
+                second_negotiation.final_price - first_negotiation.final_price,
+                2,
+            )
+        else:
+            manufacturer = next(
+                (agent for agent in run.agents if agent.role == AgentRole.MANUFACTURER),
+                None,
+            )
+            if (
+                manufacturer is not None
+                and manufacturer.reservation_prices.min_sell_price is not None
+            ):
+                manufacturer_margin_after_first_deal = round(
+                    manufacturer.reservation_prices.min_sell_price - first_negotiation.final_price,
+                    2,
+                )
+
+    belief_gap_samples = [
+        {
+            "timestamp": event.timestamp.isoformat(),
+            "phase": event.phase.value if event.phase is not None else None,
+            "round": event.round,
+            "agent": event.agent,
+            "observed_market_price": event.observed_market_price,
+            "true_market_price": run.product_context.baseline_unit_price,
+            "belief_gap": round(
+                event.observed_market_price - run.product_context.baseline_unit_price,
+                2,
+            ),
+        }
+        for event in event_log.events
+        if event.event_type == RunEventType.MARKET_PRICE_CHECK
+        and event.observed_market_price is not None
+    ]
+    average_belief_gap = None
+    if belief_gap_samples:
+        average_belief_gap = round(
+            sum(sample["belief_gap"] for sample in belief_gap_samples) / len(belief_gap_samples),
+            2,
+        )
+
+    failure_point = _infer_failure_point(run=run, event_log=event_log)
+    failure_type = _infer_failure_type(run=run, event_log=event_log)
+
+    return {
+        "true_market_price": run.product_context.baseline_unit_price,
+        "belief_gap_samples": belief_gap_samples,
+        "average_belief_gap": average_belief_gap,
+        "manufacturer_margin_after_first_deal": manufacturer_margin_after_first_deal,
+        "where_run_failed": failure_point,
+        "suspected_failure_type": failure_type,
+    }
+
+
+def _infer_failure_point(run: RunRecord, event_log: RunEventLog) -> dict | None:
+    if run.status == RunStatus.COMPLETED:
+        return None
+
+    final_event = next(
+        (event for event in reversed(event_log.events) if event.event_type == RunEventType.FINAL_OUTCOME),
+        None,
+    )
+    if final_event and final_event.phase is not None:
+        return {
+            "phase": final_event.phase.value,
+            "round": final_event.round,
+            "agent": final_event.agent,
+            "note": final_event.note,
+        }
+
+    failed_negotiation = next(
+        (negotiation for negotiation in run.negotiations if negotiation.status != NegotiationStatus.ACCEPTED),
+        None,
+    )
+    if failed_negotiation is None:
+        return None
+
+    return {
+        "phase": failed_negotiation.phase.value,
+        "round": failed_negotiation.rounds_completed,
+        "agent": failed_negotiation.buyer_agent_id,
+        "note": failed_negotiation.outcome_summary,
+    }
+
+
+def _infer_failure_type(run: RunRecord, event_log: RunEventLog) -> str | None:
+    if run.status == RunStatus.COMPLETED:
+        return None
+
+    final_event = next(
+        (event for event in reversed(event_log.events) if event.event_type == RunEventType.FINAL_OUTCOME),
+        None,
+    )
+    note = (final_event.note if final_event else "") or ""
+    lowered = note.lower()
+
+    if "invalid_api_key" in lowered or "incorrect api key" in lowered or "401" in lowered:
+        return "authentication_error"
+    if "openai" in lowered and "failed" in lowered:
+        return "llm_call_failure"
+    if "invalid json" in lowered:
+        return "llm_output_parse_error"
+    if any(negotiation.status == NegotiationStatus.TIMEOUT for negotiation in run.negotiations):
+        return "negotiation_timeout"
+    if any(negotiation.status == NegotiationStatus.REJECTED for negotiation in run.negotiations):
+        return "negotiation_rejected"
+
+    return "unknown_failure"
 
 
 def _build_outcome_summary(
@@ -725,6 +1481,10 @@ def _build_outcome_summary(
 
 def _decide_agent_action(
     openai_wrapper: OpenAIClientWrapper,
+    langfuse_wrapper: LangfuseTraceWrapper,
+    run_id: str,
+    phase: PhaseName,
+    negotiation_id: str,
     agent: Agent,
     seller: Agent,
     buyer: Agent,
@@ -748,15 +1508,60 @@ def _decide_agent_action(
         round_number=round_number,
         max_rounds=max_rounds,
     )
-    try:
-        decision = openai_wrapper.decide_action(prompt)
-    except OpenAIDecisionError as exc:
-        raise SimulationExecutionError(str(exc)) from exc
+    with langfuse_wrapper.start_span(
+        name="agent-decision",
+        input={
+            "agent_id": agent.id,
+            "role": agent.role.value,
+            "round_number": round_number,
+            "max_rounds": max_rounds,
+            "delivered_message": delivered_message,
+            "visible_last_seller_offer": seller_last_offer,
+            "visible_last_buyer_offer": buyer_last_offer,
+            "seller_floor": min_sell_price,
+            "buyer_ceiling": max_buy_price,
+        },
+        metadata={
+            "run_id": run_id,
+            "phase": phase.value,
+            "negotiation_id": negotiation_id,
+            "agent_id": agent.id,
+        },
+        status_message="Agent decision started.",
+    ) as decision_span:
+        try:
+            decision = openai_wrapper.decide_action(
+                prompt,
+                metadata={
+                    "run_id": run_id,
+                    "phase": phase.value,
+                    "negotiation_id": negotiation_id,
+                    "agent_id": agent.id,
+                    "round_number": round_number,
+                },
+                langfuse_wrapper=langfuse_wrapper,
+            )
+        except OpenAIDecisionError as exc:
+            decision_span.update(
+                output={"error": str(exc)},
+                status_message=str(exc),
+                level="ERROR",
+            )
+            raise SimulationExecutionError(str(exc)) from exc
 
-    if _is_valid_action(decision):
-        return decision
+        if _is_valid_action(decision):
+            decision_span.update(
+                output=decision,
+                status_message="Agent decision completed.",
+            )
+            return decision
 
-    raise SimulationExecutionError("OpenAI returned an unsupported action.")
+        decision_span.update(
+            output=decision,
+            status_message="OpenAI returned an unsupported action.",
+            level="ERROR",
+        )
+        raise SimulationExecutionError("OpenAI returned an unsupported action.")
 
 
 def _build_agent_prompt(
@@ -891,6 +1696,7 @@ def _market_check_event(
         arguments={
             "negotiation_id": negotiation_id,
             "product": product_name,
+            "observed_market_price": observed_price,
         },
         result_summary=f"Observed market reference price: {observed_price:.2f}.",
         created_at=utc_now(),

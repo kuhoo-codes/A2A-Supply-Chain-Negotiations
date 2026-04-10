@@ -1,5 +1,6 @@
 import json
 
+from backend.app.clients.langfuse_client import LangfuseTraceWrapper
 from backend.app.core.config import Settings
 
 
@@ -22,33 +23,72 @@ class OpenAIClientWrapper:
 
         return True, True, f"Configured with model {self.settings.openai_model}."
 
-    def decide_action(self, prompt: str) -> dict:
+    def decide_action(
+        self,
+        prompt: str,
+        *,
+        metadata: dict | None = None,
+        langfuse_wrapper: LangfuseTraceWrapper | None = None,
+    ) -> dict:
         configured, available, _ = self.get_status()
         if not configured or not available:
             raise OpenAIDecisionError("OpenAI is not configured or available.")
 
-        try:
-            from openai import OpenAI
+        tracer = langfuse_wrapper or _NoopLangfuseWrapper()
+        with tracer.start_generation(
+            name="openai-decision",
+            model=self.settings.openai_model,
+            input=prompt,
+            metadata=metadata or {},
+            model_parameters={"api": "responses.create"},
+        ) as generation:
+            try:
+                from openai import OpenAI
 
-            client = OpenAI(api_key=self.settings.openai_api_key)
-            response = client.responses.create(
-                model=self.settings.openai_model,
-                input=prompt,
-            )
-            output_text = getattr(response, "output_text", "")
-            if not output_text:
-                raise OpenAIDecisionError("OpenAI returned an empty decision response.")
+                client = OpenAI(api_key=self.settings.openai_api_key)
+                response = client.responses.create(
+                    model=self.settings.openai_model,
+                    input=prompt,
+                )
+                output_text = getattr(response, "output_text", "")
+                if not output_text:
+                    raise OpenAIDecisionError("OpenAI returned an empty decision response.")
 
-            return _parse_json_response(output_text)
-        except OpenAIDecisionError:
-            raise
-        except json.JSONDecodeError as exc:
-            raise OpenAIDecisionError("OpenAI returned invalid JSON.") from exc
-        except Exception as exc:
-            detail = str(exc).strip() or exc.__class__.__name__
-            raise OpenAIDecisionError(
-                f"OpenAI decision call failed: {detail}"
-            ) from exc
+                parsed = _parse_json_response(output_text)
+                usage = _extract_usage(response)
+                generation.update(
+                    output=parsed,
+                    metadata={
+                        **(metadata or {}),
+                        "raw_output_preview": output_text[:500],
+                    },
+                    usage_details=usage or None,
+                    status_message="OpenAI decision completed.",
+                )
+                return parsed
+            except OpenAIDecisionError as exc:
+                generation.update(
+                    output={"error": str(exc)},
+                    status_message=str(exc),
+                    level="ERROR",
+                )
+                raise
+            except json.JSONDecodeError as exc:
+                generation.update(
+                    output={"error": "OpenAI returned invalid JSON."},
+                    status_message="OpenAI returned invalid JSON.",
+                    level="ERROR",
+                )
+                raise OpenAIDecisionError("OpenAI returned invalid JSON.") from exc
+            except Exception as exc:
+                detail = str(exc).strip() or exc.__class__.__name__
+                message = f"OpenAI decision call failed: {detail}"
+                generation.update(
+                    output={"error": message},
+                    status_message=message,
+                    level="ERROR",
+                )
+                raise OpenAIDecisionError(message) from exc
 
 
 def _parse_json_response(output_text: str) -> dict:
@@ -75,3 +115,36 @@ def _parse_json_response(output_text: str) -> dict:
         return json.loads(cleaned_output[first_brace : last_brace + 1])
 
     raise OpenAIDecisionError("OpenAI returned invalid JSON.")
+
+
+def _extract_usage(response: object) -> dict[str, int]:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return {}
+
+    usage_details: dict[str, int] = {}
+    for source_name, target_name in (
+        ("input_tokens", "input_tokens"),
+        ("output_tokens", "output_tokens"),
+        ("total_tokens", "total_tokens"),
+    ):
+        value = getattr(usage, source_name, None)
+        if isinstance(value, int):
+            usage_details[target_name] = value
+
+    return usage_details
+
+
+class _NoopLangfuseWrapper:
+    def start_generation(self, **_: object):
+        class _NoopObservation:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def update(self, **__: object) -> None:
+                return None
+
+        return _NoopObservation()

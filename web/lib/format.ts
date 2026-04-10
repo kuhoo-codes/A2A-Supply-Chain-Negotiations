@@ -12,7 +12,6 @@ export function formatLabel(value: string): string {
   }
 
   return value
-    .split("-")
-    .join(" ")
+    .replace(/[-_]/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }

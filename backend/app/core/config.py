@@ -9,6 +9,7 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 ENV_PATH = ROOT_DIR / ".env"
 RUNS_DIR = ROOT_DIR / "runs"
 EXPORTS_DIR = ROOT_DIR / "exports"
+EVENTS_DIR = ROOT_DIR / "events"
 
 
 def load_env_file() -> None:
@@ -21,7 +22,14 @@ def load_env_file() -> None:
             continue
 
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip())
+        os.environ.setdefault(key.strip(), _normalize_env_value(value.strip()))
+
+
+def _normalize_env_value(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+
+    return value
 
 
 class Settings(BaseModel):
@@ -33,6 +41,7 @@ class Settings(BaseModel):
     next_public_api_base_url: str
     runs_dir: Path
     exports_dir: Path
+    events_dir: Path
 
     @property
     def openai_enabled(self) -> bool:
@@ -59,4 +68,5 @@ def get_settings() -> Settings:
         ),
         runs_dir=RUNS_DIR,
         exports_dir=EXPORTS_DIR,
+        events_dir=EVENTS_DIR,
     )

@@ -28,6 +28,22 @@ class NegotiationStatus(StrEnum):
     TIMEOUT = "timeout"
 
 
+class RunEventType(StrEnum):
+    RUN_START = "run_start"
+    RUN_END = "run_end"
+    PHASE_START = "phase_start"
+    PHASE_END = "phase_end"
+    AGENT_TURN = "agent_turn"
+    TOOL_CALL = "tool_call"
+    MARKET_PRICE_CHECK = "market_price_check"
+    OFFER_MADE = "offer_made"
+    OFFER_RECEIVED = "offer_received"
+    ACCEPT = "accept"
+    REJECT = "reject"
+    TIMEOUT = "timeout"
+    FINAL_OUTCOME = "final_outcome"
+
+
 class ReservationPrices(BaseModel):
     min_sell_price: float | None = None
     max_buy_price: float | None = None
@@ -69,6 +85,13 @@ class ToolCallEvent(BaseModel):
     created_at: datetime
 
 
+class DeliveredMessage(BaseModel):
+    type: str
+    price: float | None = None
+    note: str | None = None
+    from_agent_id: str | None = None
+
+
 class NegotiationStep(BaseModel):
     index: int
     phase: PhaseName
@@ -79,6 +102,7 @@ class NegotiationStep(BaseModel):
     message: str
     outcome: str
     proposed_price: float | None = None
+    delivered_message: DeliveredMessage | None = None
     created_at: datetime
     tool_calls: list[ToolCallEvent] = Field(default_factory=list)
 
@@ -106,6 +130,30 @@ class DiagnosisSummary(BaseModel):
     key_risks: list[str] = Field(default_factory=list)
     key_signals: list[str] = Field(default_factory=list)
     suggested_next_actions: list[str] = Field(default_factory=list)
+
+
+class RunEvent(BaseModel):
+    run_id: str
+    timestamp: datetime
+    phase: PhaseName | None = None
+    round: int | None = None
+    agent: str | None = None
+    event_type: RunEventType
+    observed_market_price: float | None = None
+    offer_price: float | None = None
+    action: str | None = None
+    status: str | None = None
+    note: str | None = None
+    reasoning_summary: str | None = None
+    negotiation_id: str | None = None
+    tool_name: str | None = None
+
+
+class RunEventLog(BaseModel):
+    run_id: str
+    created_at: datetime
+    updated_at: datetime
+    events: list[RunEvent] = Field(default_factory=list)
 
 
 class RunSummary(BaseModel):
