@@ -44,7 +44,8 @@ export function RunSeedForm({ mode = "refresh" }: RunSeedFormProps) {
         return;
       }
 
-      setSuccess(`${payload.data.count} simulations created.`);
+      setSuccess(`${payload.data.count} simulations launched.`);
+      setIsSubmitting(false);
       startTransition(() => {
         if (mode === "redirect") {
           router.push("/runs");
@@ -77,7 +78,7 @@ export function RunSeedForm({ mode = "refresh" }: RunSeedFormProps) {
           disabled={isSubmitting || isPending || !seed}
           type="submit"
         >
-          {isSubmitting || isPending ? "Running Simulations..." : "Run Simulation"}
+          {isSubmitting || isPending ? "Launching Simulations..." : "Run Simulation"}
         </button>
       </div>
 

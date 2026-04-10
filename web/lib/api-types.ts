@@ -45,6 +45,12 @@ export type SimulationBatchResult = {
   runs: RunRecord[];
 };
 
+export type SimulationBatchLaunchResult = {
+  seed: number;
+  count: number;
+  runs: RunRecord[];
+};
+
 export type Agent = {
   id: string;
   name: string;

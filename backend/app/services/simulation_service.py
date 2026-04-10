@@ -1,5 +1,6 @@
 import json
 from random import Random
+from threading import Thread
 from uuid import uuid4
 
 from backend.app.clients.langfuse_client import LangfuseTraceWrapper
@@ -25,6 +26,7 @@ from backend.app.models.run import (
     utc_now,
 )
 from backend.app.models.simulation import (
+    SimulationBatchLaunchResult,
     PipelineDependencyStatus,
     PipelineExportRecord,
     SimulationBatchResult,
@@ -33,11 +35,14 @@ from backend.app.models.simulation import (
 from backend.app.models.simulation_request import SimulationRunConfig, SimulationSeedRequest
 from backend.app.services.event_repository import save_run_event_log
 from backend.app.services.export_repository import save_simulation_export_bundle
-from backend.app.services.run_repository import save_run_record
+from backend.app.services.run_repository import get_run_record, save_run_record
 
 
 class SimulationExecutionError(Exception):
     pass
+
+
+MAX_AGENT_TURNS_PER_NEGOTIATION = 15
 
 
 class RunEventCollector:
@@ -113,22 +118,84 @@ class SimulationRunExecutionResult:
         self.failure_type = failure_type
 
 
+class RunSnapshotWriter:
+    def __init__(
+        self,
+        *,
+        run_id: str,
+        title: str,
+        scenario: str,
+        created_at,
+        product_context: ProductMarketContext,
+        agents: list[Agent],
+        phases: list[Phase],
+        max_rounds_per_negotiation: int,
+    ) -> None:
+        self.run_id = run_id
+        self.title = title
+        self.scenario = scenario
+        self.created_at = created_at
+        self.product_context = product_context
+        self.agents = agents
+        self.phases = phases
+        self.max_rounds_per_negotiation = max_rounds_per_negotiation
+
+    def save(
+        self,
+        *,
+        status: RunStatus,
+        steps: list[NegotiationStep],
+        negotiations: list[NegotiationRecord],
+        diagnosis: DiagnosisSummary,
+        updated_at=None,
+        notes: str = "Backend simulation with linked upstream and downstream negotiations.",
+    ) -> RunRecord:
+        run = RunRecord(
+            id=self.run_id,
+            title=self.title,
+            status=status,
+            scenario=self.scenario,
+            created_at=self.created_at,
+            updated_at=updated_at or utc_now(),
+            product_context=self.product_context,
+            agents=self.agents,
+            phases=self.phases,
+            steps=steps,
+            negotiations=negotiations,
+            diagnosis=diagnosis,
+            max_rounds_per_negotiation=self.max_rounds_per_negotiation,
+            notes=notes,
+            tags=["simulation", "supply-chain"],
+        )
+        save_run_record(run)
+        return run
+
+
 def simulate_run(request: SimulationRunConfig | None) -> RunRecord:
     return _execute_simulation_run(request).run
 
 
-def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRunExecutionResult:
+def _execute_simulation_run(
+    request: SimulationRunConfig | None,
+    *,
+    run_id: str | None = None,
+    created_at=None,
+) -> SimulationRunExecutionResult:
     if request is None:
         raise SimulationExecutionError("Simulation input is required.")
 
     simulation_request = request
-    created_at = utc_now()
-    run_id = f"run-{uuid4().hex[:10]}"
+    created_at = created_at or utc_now()
+    run_id = run_id or f"run-{uuid4().hex[:10]}"
     event_collector = RunEventCollector(run_id=run_id, created_at=created_at)
     settings = get_settings()
     langfuse_wrapper = LangfuseTraceWrapper(settings)
     trace_id: str | None = None
     trace_url: str | None = None
+    scenario = (
+        f"{simulation_request.product_name} in {simulation_request.market_region}. "
+        f"Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation."
+    )
     event_collector.log(
         event_type=RunEventType.RUN_START,
         timestamp=created_at,
@@ -156,49 +223,74 @@ def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRu
         openai_configured, openai_available, openai_message = openai_wrapper.get_status()
         trace_id = langfuse_wrapper.get_current_trace_id()
         trace_url = langfuse_wrapper.get_trace_url(trace_id=trace_id)
+        supplier = Agent(
+            id="supplier",
+            name="Supplier",
+            role=AgentRole.SUPPLIER,
+            objective="Sell above the supplier reservation price while keeping volume committed.",
+            reservation_prices=ReservationPrices(
+                min_sell_price=simulation_request.supplier_min_sell_price
+            ),
+        )
+        manufacturer = Agent(
+            id="manufacturer",
+            name="Manufacturer",
+            role=AgentRole.MANUFACTURER,
+            objective="Buy below the procurement ceiling and preserve downstream margin.",
+            reservation_prices=ReservationPrices(
+                min_sell_price=simulation_request.manufacturer_min_sell_price,
+                max_buy_price=simulation_request.manufacturer_max_buy_price,
+            ),
+        )
+        retailer = Agent(
+            id="retailer",
+            name="Retailer",
+            role=AgentRole.RETAILER,
+            objective="Buy enough units without exceeding the retail reservation price.",
+            reservation_prices=ReservationPrices(
+                max_buy_price=simulation_request.retailer_max_buy_price
+            ),
+        )
+        phases = _build_phases()
+        product_context = ProductMarketContext(
+            product_name=simulation_request.product_name,
+            product_category=simulation_request.product_category,
+            market_region=simulation_request.market_region,
+            baseline_unit_price=simulation_request.baseline_unit_price,
+            target_quantity=simulation_request.target_quantity,
+            currency=simulation_request.currency,
+            demand_signal=simulation_request.demand_signal,
+            supply_signal=simulation_request.supply_signal,
+        )
+        snapshot_writer = RunSnapshotWriter(
+            run_id=run_id,
+            title=simulation_request.title,
+            scenario=scenario,
+            created_at=created_at,
+            product_context=product_context,
+            agents=[supplier, manufacturer, retailer],
+            phases=phases,
+            max_rounds_per_negotiation=simulation_request.max_rounds_per_negotiation,
+        )
+        running_diagnosis = DiagnosisSummary(
+            outcome="Simulation is running.",
+            chain_effect="Live negotiation activity will appear as each agent turn is persisted.",
+            key_risks=["Live data is incomplete until both negotiations finish."],
+            key_signals=["Run initialized and waiting for agent decisions."],
+            suggested_next_actions=["Open the run detail page to watch the transcript build in real time."],
+        )
+        snapshot_writer.save(
+            status=RunStatus.RUNNING,
+            steps=[],
+            negotiations=[],
+            diagnosis=running_diagnosis,
+            updated_at=created_at,
+            notes="Simulation has started and will update this record incrementally.",
+        )
+        save_run_event_log(settings.events_dir, event_collector.build_log())
         try:
             if not openai_configured or not openai_available:
                 raise SimulationExecutionError(openai_message)
-
-            supplier = Agent(
-                id="supplier",
-                name="Supplier",
-                role=AgentRole.SUPPLIER,
-                objective="Sell above the supplier reservation price while keeping volume committed.",
-                reservation_prices=ReservationPrices(
-                    min_sell_price=simulation_request.supplier_min_sell_price
-                ),
-            )
-            manufacturer = Agent(
-                id="manufacturer",
-                name="Manufacturer",
-                role=AgentRole.MANUFACTURER,
-                objective="Buy below the procurement ceiling and preserve downstream margin.",
-                reservation_prices=ReservationPrices(
-                    min_sell_price=simulation_request.manufacturer_min_sell_price,
-                    max_buy_price=simulation_request.manufacturer_max_buy_price,
-                ),
-            )
-            retailer = Agent(
-                id="retailer",
-                name="Retailer",
-                role=AgentRole.RETAILER,
-                objective="Buy enough units without exceeding the retail reservation price.",
-                reservation_prices=ReservationPrices(
-                    max_buy_price=simulation_request.retailer_max_buy_price
-                ),
-            )
-            phases = _build_phases()
-            product_context = ProductMarketContext(
-                product_name=simulation_request.product_name,
-                product_category=simulation_request.product_category,
-                market_region=simulation_request.market_region,
-                baseline_unit_price=simulation_request.baseline_unit_price,
-                target_quantity=simulation_request.target_quantity,
-                currency=simulation_request.currency,
-                demand_signal=simulation_request.demand_signal,
-                supply_signal=simulation_request.supply_signal,
-            )
 
             event_collector.log(
                 event_type=RunEventType.PHASE_START,
@@ -206,6 +298,7 @@ def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRu
                 status=NegotiationStatus.OPEN.value,
                 note="Initial upstream procurement negotiation started.",
             )
+            save_run_event_log(settings.events_dir, event_collector.build_log())
             with langfuse_wrapper.start_span(
                 name="negotiation-phase",
                 input={
@@ -240,6 +333,13 @@ def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRu
                     step_index_start=1,
                     dependency_note="Initial upstream procurement negotiation.",
                     event_collector=event_collector,
+                    on_step=lambda current_steps: _persist_running_snapshot(
+                        snapshot_writer=snapshot_writer,
+                        event_collector=event_collector,
+                        settings=settings,
+                        steps=current_steps,
+                        negotiations=[],
+                    ),
                 )
                 first_phase_trace.update(
                     output={
@@ -257,6 +357,13 @@ def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRu
                 offer_price=first_result.record.final_price,
                 negotiation_id=first_result.record.id,
                 note=first_result.record.outcome_summary,
+            )
+            _persist_running_snapshot(
+                snapshot_writer=snapshot_writer,
+                event_collector=event_collector,
+                settings=settings,
+                steps=first_result.steps,
+                negotiations=[first_result.record],
             )
 
             second_result: NegotiationSimulationResult | None = None
@@ -285,6 +392,7 @@ def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRu
                         "Downstream negotiation started with the accepted upstream deal as cost basis."
                     ),
                 )
+                save_run_event_log(settings.events_dir, event_collector.build_log())
                 with langfuse_wrapper.start_span(
                     name="negotiation-phase",
                     input={
@@ -322,6 +430,13 @@ def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRu
                             "Manufacturer sell floor uses the accepted upstream deal as its cost basis."
                         ),
                         event_collector=event_collector,
+                        on_step=lambda current_steps: _persist_running_snapshot(
+                            snapshot_writer=snapshot_writer,
+                            event_collector=event_collector,
+                            settings=settings,
+                            steps=[*first_result.steps, *current_steps],
+                            negotiations=[first_result.record],
+                        ),
                     )
                     second_phase_trace.update(
                         output={
@@ -339,6 +454,13 @@ def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRu
                     offer_price=second_result.record.final_price,
                     negotiation_id=second_result.record.id,
                     note=second_result.record.outcome_summary,
+                )
+                _persist_running_snapshot(
+                    snapshot_writer=snapshot_writer,
+                    event_collector=event_collector,
+                    settings=settings,
+                    steps=[*first_result.steps, *second_result.steps],
+                    negotiations=[first_result.record, second_result.record],
                 )
 
             negotiations = [first_result.record]
@@ -367,10 +489,7 @@ def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRu
                 id=run_id,
                 title=simulation_request.title,
                 status=status,
-                scenario=(
-                    f"{simulation_request.product_name} in {simulation_request.market_region}. "
-                    f"Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation."
-                ),
+                scenario=scenario,
                 created_at=created_at,
                 updated_at=utc_now(),
                 product_context=product_context,
@@ -436,6 +555,22 @@ def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRu
                 failure_type=None,
             )
         except Exception as exc:
+            existing_run = get_run_record(run_id)
+            failed_diagnosis = DiagnosisSummary(
+                outcome=f"Simulation failed: {exc}",
+                chain_effect="The run terminated before all negotiation phases were persisted.",
+                key_risks=["The live transcript may be partial."],
+                key_signals=["Backend raised an execution error."],
+                suggested_next_actions=["Inspect the event log for the last completed agent turn."],
+            )
+            snapshot_writer.save(
+                status=RunStatus.FAILED,
+                steps=existing_run.steps if existing_run is not None else [],
+                negotiations=existing_run.negotiations if existing_run is not None else [],
+                diagnosis=failed_diagnosis,
+                updated_at=utc_now(),
+                notes="Simulation failed before completion.",
+            )
             event_collector.log(
                 event_type=RunEventType.FINAL_OUTCOME,
                 status=RunStatus.FAILED.value,
@@ -462,6 +597,150 @@ def _execute_simulation_run(request: SimulationRunConfig | None) -> SimulationRu
 def run_seeded_simulations(request: SimulationSeedRequest) -> SimulationBatchResult:
     runs = [simulate_run(item) for item in _build_seeded_requests(request.seed)]
     return SimulationBatchResult(seed=request.seed, count=len(runs), runs=runs)
+
+
+def launch_seeded_simulations(
+    request: SimulationSeedRequest,
+) -> SimulationBatchLaunchResult:
+    launched_runs: list[RunRecord] = []
+    for config in _build_seeded_requests(request.seed):
+        created_at = utc_now()
+        run_id = f"run-{uuid4().hex[:10]}"
+        launched_runs.append(_create_pending_run(config, run_id=run_id, created_at=created_at))
+        Thread(
+            target=_run_simulation_in_background,
+            args=(config, run_id, created_at),
+            daemon=True,
+            name=f"simulation-{run_id}",
+        ).start()
+
+    return SimulationBatchLaunchResult(
+        seed=request.seed,
+        count=len(launched_runs),
+        runs=launched_runs,
+    )
+
+
+def _run_simulation_in_background(
+    config: SimulationRunConfig,
+    run_id: str,
+    created_at,
+) -> None:
+    try:
+        _execute_simulation_run(config, run_id=run_id, created_at=created_at)
+    except Exception:
+        return None
+
+
+def _create_pending_run(
+    config: SimulationRunConfig,
+    *,
+    run_id: str,
+    created_at,
+) -> RunRecord:
+    supplier = Agent(
+        id="supplier",
+        name="Supplier",
+        role=AgentRole.SUPPLIER,
+        objective="Sell above the supplier reservation price while keeping volume committed.",
+        reservation_prices=ReservationPrices(min_sell_price=config.supplier_min_sell_price),
+    )
+    manufacturer = Agent(
+        id="manufacturer",
+        name="Manufacturer",
+        role=AgentRole.MANUFACTURER,
+        objective="Buy below the procurement ceiling and preserve downstream margin.",
+        reservation_prices=ReservationPrices(
+            min_sell_price=config.manufacturer_min_sell_price,
+            max_buy_price=config.manufacturer_max_buy_price,
+        ),
+    )
+    retailer = Agent(
+        id="retailer",
+        name="Retailer",
+        role=AgentRole.RETAILER,
+        objective="Buy enough units without exceeding the retail reservation price.",
+        reservation_prices=ReservationPrices(max_buy_price=config.retailer_max_buy_price),
+    )
+    run = RunRecord(
+        id=run_id,
+        title=config.title,
+        status=RunStatus.RUNNING,
+        scenario=(
+            f"{config.product_name} in {config.market_region}. "
+            f"Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation."
+        ),
+        created_at=created_at,
+        updated_at=created_at,
+        product_context=ProductMarketContext(
+            product_name=config.product_name,
+            product_category=config.product_category,
+            market_region=config.market_region,
+            baseline_unit_price=config.baseline_unit_price,
+            target_quantity=config.target_quantity,
+            currency=config.currency,
+            demand_signal=config.demand_signal,
+            supply_signal=config.supply_signal,
+        ),
+        agents=[supplier, manufacturer, retailer],
+        phases=_build_phases(),
+        steps=[],
+        negotiations=[],
+        diagnosis=DiagnosisSummary(
+            outcome="Simulation is running.",
+            chain_effect="Live updates will appear as soon as each agent turn is persisted.",
+            key_risks=["This record is incomplete while execution is in progress."],
+            key_signals=["Run has been queued and initialized."],
+            suggested_next_actions=["Open the run to watch the chat and event log update in real time."],
+        ),
+        max_rounds_per_negotiation=config.max_rounds_per_negotiation,
+        notes="Simulation has started and will update this record incrementally.",
+        tags=["simulation", "supply-chain"],
+    )
+    save_run_record(run)
+    save_run_event_log(
+        get_settings().events_dir,
+        RunEventLog(
+            run_id=run_id,
+            created_at=created_at,
+            updated_at=created_at,
+            events=[
+                RunEvent(
+                    run_id=run_id,
+                    timestamp=created_at,
+                    event_type=RunEventType.RUN_START,
+                    status=RunStatus.RUNNING.value,
+                    note=f"Starting {config.title}.",
+                )
+            ],
+        ),
+    )
+    return run
+
+
+def _persist_running_snapshot(
+    *,
+    snapshot_writer: RunSnapshotWriter,
+    event_collector: RunEventCollector,
+    settings,
+    steps: list[NegotiationStep],
+    negotiations: list[NegotiationRecord],
+) -> None:
+    snapshot_writer.save(
+        status=RunStatus.RUNNING,
+        steps=steps,
+        negotiations=negotiations,
+        diagnosis=DiagnosisSummary(
+            outcome="Simulation is running.",
+            chain_effect="Live negotiation activity is being written to the transcript as each step completes.",
+            key_risks=["Final diagnosis and derived metrics are not complete yet."],
+            key_signals=[f"{len(steps)} transcript steps persisted.", f"{len(negotiations)} negotiations resolved so far."],
+            suggested_next_actions=["Keep this page open to watch additional messages arrive."],
+        ),
+        updated_at=utc_now(),
+        notes="Simulation is still running and this snapshot is live.",
+    )
+    save_run_event_log(settings.events_dir, event_collector.build_log())
 
 
 def run_test_pipeline(request: SimulationSeedRequest | None = None) -> SimulationTestPipelineResult:
@@ -656,6 +935,7 @@ def _simulate_negotiation(
     max_rounds: int,
     step_index_start: int,
     dependency_note: str,
+    on_step=None,
 ) -> NegotiationSimulationResult:
     negotiation_id = f"neg-{uuid4().hex[:8]}"
     steps: list[NegotiationStep] = []
@@ -666,6 +946,7 @@ def _simulate_negotiation(
     seller_last_offer: float | None = None
     buyer_last_offer: float | None = None
     rounds_completed = 0
+    max_turns = min(max_rounds * 2, MAX_AGENT_TURNS_PER_NEGOTIATION)
 
     if max_buy_price < min_sell_price:
         now = utc_now()
@@ -728,6 +1009,8 @@ def _simulate_negotiation(
                 tool_calls=seller_tool_calls,
             )
         )
+        if on_step is not None:
+            on_step(steps)
         event_collector.log(
             event_type=RunEventType.OFFER_MADE,
             timestamp=now,
@@ -815,6 +1098,8 @@ def _simulate_negotiation(
                 tool_calls=buyer_tool_calls,
             )
         )
+        if on_step is not None:
+            on_step(steps)
         event_collector.log(
             event_type=RunEventType.REJECT,
             phase=phase,
@@ -846,9 +1131,10 @@ def _simulate_negotiation(
             steps=steps,
         )
 
-    for turn_index in range(max_rounds * 2):
+    for turn_index in range(max_turns):
         round_number = (turn_index // 2) + 1
         rounds_completed = round_number
+        turn_number = turn_index + 1
         current_agent = seller if turn_index % 2 == 0 else buyer
         _log_offer_received_event(
             event_collector,
@@ -906,6 +1192,8 @@ def _simulate_negotiation(
             buyer_last_offer=buyer_last_offer,
             round_number=round_number,
             max_rounds=max_rounds,
+            turn_number=turn_number,
+            max_turns=max_turns,
         )
 
         kind = action["action"]
@@ -965,6 +1253,8 @@ def _simulate_negotiation(
                     tool_calls=tool_calls,
                 )
             )
+            if on_step is not None:
+                on_step(steps)
             delivered_message = {
                 "type": "offer",
                 "price": proposed_price,
@@ -1003,6 +1293,8 @@ def _simulate_negotiation(
                     tool_calls=tool_calls,
                 )
             )
+            if on_step is not None:
+                on_step(steps)
             status = NegotiationStatus.ACCEPTED
             event_collector.log(
                 event_type=RunEventType.ACCEPT,
@@ -1036,6 +1328,8 @@ def _simulate_negotiation(
                     tool_calls=tool_calls,
                 )
             )
+            if on_step is not None:
+                on_step(steps)
             status = NegotiationStatus.REJECTED
             event_collector.log(
                 event_type=RunEventType.REJECT,
@@ -1092,6 +1386,8 @@ def _simulate_negotiation(
                     tool_calls=tool_calls,
                 )
             )
+            if on_step is not None:
+                on_step(steps)
             delivered_message = {
                 "type": "offer",
                 "price": fallback_price,
@@ -1124,13 +1420,15 @@ def _simulate_negotiation(
                 round_number=rounds_completed,
                 agent_id=buyer.id,
                 kind="timeout",
-                message=f"{label} reached the round limit without agreement.",
+                message=f"{label} reached the turn limit without agreement.",
                 outcome="Negotiation times out.",
                 proposed_price=None,
                 delivered_message=delivered_message,
                 created_at=timeout_timestamp,
             )
         )
+        if on_step is not None:
+            on_step(steps)
         event_collector.log(
             event_type=RunEventType.TIMEOUT,
             timestamp=timeout_timestamp,
@@ -1139,8 +1437,8 @@ def _simulate_negotiation(
             agent=buyer.id,
             action="timeout",
             status=status.value,
-            note=f"{label} reached the round limit without agreement.",
-            reasoning_summary="Negotiation timed out after exhausting the configured round limit.",
+            note=f"{label} reached the turn limit without agreement.",
+            reasoning_summary="Negotiation timed out after exhausting the configured turn limit.",
             negotiation_id=negotiation_id,
         )
 
@@ -1246,7 +1544,7 @@ def _build_diagnosis(
         ),
         key_risks=[
             "A costly upstream agreement compresses downstream negotiating room.",
-            "Round limits can force timeouts even when the gap is narrowing.",
+            "Turn limits can force timeouts even when the gap is narrowing.",
         ],
         key_signals=[
             f"Supplier-manufacturer status: {first_negotiation.status.value}.",
@@ -1257,7 +1555,7 @@ def _build_diagnosis(
             ),
         ],
         suggested_next_actions=[
-            "Tune reservation prices and round limits to test sensitivity.",
+            "Tune reservation prices and turn limits to test sensitivity.",
             "Add richer quantity or margin tradeoffs before introducing LLM behavior.",
         ],
     )
@@ -1475,7 +1773,7 @@ def _build_outcome_summary(
     if status == NegotiationStatus.REJECTED:
         return f"{label} ended in rejection."
     if status == NegotiationStatus.TIMEOUT:
-        return f"{label} reached the round limit without agreement."
+        return f"{label} reached the turn limit without agreement."
     return f"{label} remains open."
 
 
@@ -1495,6 +1793,8 @@ def _decide_agent_action(
     buyer_last_offer: float | None,
     round_number: int,
     max_rounds: int,
+    turn_number: int,
+    max_turns: int,
 ) -> dict:
     prompt = _build_agent_prompt(
         agent=agent,
@@ -1507,6 +1807,8 @@ def _decide_agent_action(
         buyer_last_offer=buyer_last_offer,
         round_number=round_number,
         max_rounds=max_rounds,
+        turn_number=turn_number,
+        max_turns=max_turns,
     )
     with langfuse_wrapper.start_span(
         name="agent-decision",
@@ -1514,7 +1816,9 @@ def _decide_agent_action(
             "agent_id": agent.id,
             "role": agent.role.value,
             "round_number": round_number,
+            "turn_number": turn_number,
             "max_rounds": max_rounds,
+            "max_turns": max_turns,
             "delivered_message": delivered_message,
             "visible_last_seller_offer": seller_last_offer,
             "visible_last_buyer_offer": buyer_last_offer,
@@ -1538,6 +1842,7 @@ def _decide_agent_action(
                     "negotiation_id": negotiation_id,
                     "agent_id": agent.id,
                     "round_number": round_number,
+                    "turn_number": turn_number,
                 },
                 langfuse_wrapper=langfuse_wrapper,
             )
@@ -1575,6 +1880,8 @@ def _build_agent_prompt(
     buyer_last_offer: float | None,
     round_number: int,
     max_rounds: int,
+    turn_number: int,
+    max_turns: int,
 ) -> str:
     visible_state = {
         "agent_id": agent.id,
@@ -1585,7 +1892,9 @@ def _build_agent_prompt(
         "visible_last_buyer_offer": buyer_last_offer,
         "delivered_message": delivered_message,
         "round_number": round_number,
+        "turn_number": turn_number,
         "max_rounds": max_rounds,
+        "max_turns": max_turns,
         "seller_id": seller.id,
         "buyer_id": buyer.id,
         "rules": [
@@ -1593,6 +1902,7 @@ def _build_agent_prompt(
             "Actions: make_offer, accept_offer, reject_offer.",
             "Accept or reject only if you received an offer.",
             "Keep note short.",
+            f"Do not exceed {max_turns} total agent turns in this negotiation.",
             "Return JSON only.",
         ],
         "market_bounds": {
@@ -1736,12 +2046,10 @@ def manufacturer_floor_if_applicable(seller: Agent, fallback: float) -> float:
 
 def _build_seeded_requests(seed: int) -> list:
     rng = Random(seed)
-    scenario_builders = [
-        _build_harvest_pressure_scenario,
-        _build_packaging_cost_scenario,
-        _build_retail_promotion_scenario,
+    return [
+        _build_harvest_pressure_scenario(rng, seed, index + 1)
+        for index in range(3)
     ]
-    return [builder(rng, seed, index + 1) for index, builder in enumerate(scenario_builders)]
 
 
 def _build_harvest_pressure_scenario(rng: Random, seed: int, index: int):

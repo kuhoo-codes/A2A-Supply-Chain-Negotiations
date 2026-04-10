@@ -1,19 +1,19 @@
 {
-  "id": "run-22dcc12415",
-  "title": "Promotion Inventory Surge Run Seed 11-3",
+  "id": "run-e0d6ab532d",
+  "title": "Tomato Harvest Pricing Run Seed 19-1",
   "status": "completed",
-  "scenario": "Tomato Ketchup in West Coast. Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation.",
-  "created_at": "2026-04-10T10:42:43.718742Z",
-  "updated_at": "2026-04-10T10:42:51.339793Z",
+  "scenario": "Tomato Ketchup in Ontario. Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation.",
+  "created_at": "2026-04-10T11:44:19.246538Z",
+  "updated_at": "2026-04-10T11:44:43.854466Z",
   "product_context": {
     "product_name": "Tomato Ketchup",
     "product_category": "condiments",
-    "market_region": "West Coast",
-    "baseline_unit_price": 2.63,
-    "target_quantity": 2849,
+    "market_region": "Ontario",
+    "baseline_unit_price": 2.13,
+    "target_quantity": 2493,
     "currency": "USD",
-    "demand_signal": "Retail chains are loading ketchup inventory ahead of a multi-week promotion and need fast replenishment.",
-    "supply_signal": "Upstream ingredient supply is stable, but rush production slots are limited this month."
+    "demand_signal": "Retail ketchup demand is steady, but wholesale buyers want price protection before peak tomato procurement.",
+    "supply_signal": "Tomato harvest yields are uneven across growing regions, putting pressure on paste input pricing."
   },
   "agents": [
     {
@@ -22,7 +22,7 @@
       "role": "supplier",
       "objective": "Sell above the supplier reservation price while keeping volume committed.",
       "reservation_prices": {
-        "min_sell_price": 2.55,
+        "min_sell_price": 1.98,
         "max_buy_price": null
       }
     },
@@ -32,8 +32,8 @@
       "role": "manufacturer",
       "objective": "Buy below the procurement ceiling and preserve downstream margin.",
       "reservation_prices": {
-        "min_sell_price": 3.32,
-        "max_buy_price": 2.91
+        "min_sell_price": 2.39,
+        "max_buy_price": 2.11
       }
     },
     {
@@ -43,7 +43,7 @@
       "objective": "Buy enough units without exceeding the retail reservation price.",
       "reservation_prices": {
         "min_sell_price": null,
-        "max_buy_price": 3.66
+        "max_buy_price": 2.63
       }
     }
   ],
@@ -65,211 +65,225 @@
     {
       "index": 1,
       "phase": "supplier_manufacturer",
-      "negotiation_id": "neg-01c9f998",
+      "negotiation_id": "neg-fd650c5c",
       "round_number": 1,
       "agent_id": "supplier",
       "kind": "offer",
-      "message": "Initial offer above minimum price",
+      "message": "Start close to buyer ceiling to maximize revenue",
       "outcome": "Offer queued for delivery on the next turn.",
-      "proposed_price": 2.85,
-      "created_at": "2026-04-10T10:42:46.931747Z",
+      "proposed_price": 2.1,
+      "delivered_message": null,
+      "created_at": "2026-04-10T11:44:34.696708Z",
       "tool_calls": [
         {
-          "id": "tool-628e899a",
+          "id": "tool-a9040708",
           "step_index": 1,
           "agent_id": "supplier",
           "tool_name": "review_state",
           "arguments": {
-            "negotiation_id": "neg-01c9f998",
+            "negotiation_id": "neg-fd650c5c",
             "round_number": 1
           },
           "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: none.",
-          "created_at": "2026-04-10T10:42:43.850214Z"
+          "created_at": "2026-04-10T11:44:19.919193Z"
         },
         {
-          "id": "tool-bdc472c7",
+          "id": "tool-21369edf",
           "step_index": 1,
           "agent_id": "supplier",
           "tool_name": "check_market_price",
           "arguments": {
-            "negotiation_id": "neg-01c9f998",
+            "negotiation_id": "neg-fd650c5c",
             "product": "Tomato Ketchup",
-            "observed_market_price": 6.73
+            "observed_market_price": 6.04
           },
-          "result_summary": "Observed market reference price: 6.73.",
-          "created_at": "2026-04-10T10:42:43.850238Z"
+          "result_summary": "Observed market reference price: 6.04.",
+          "created_at": "2026-04-10T11:44:19.919205Z"
         }
       ]
     },
     {
       "index": 2,
       "phase": "supplier_manufacturer",
-      "negotiation_id": "neg-01c9f998",
+      "negotiation_id": "neg-fd650c5c",
       "round_number": 1,
       "agent_id": "manufacturer",
       "kind": "accept",
       "message": "Manufacturer accepts the pending offer.",
       "outcome": "Negotiation ends with an accepted deal.",
-      "proposed_price": 2.85,
-      "created_at": "2026-04-10T10:42:48.539218Z",
+      "proposed_price": 2.1,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.1,
+        "note": "Start close to buyer ceiling to maximize revenue",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T11:44:36.457104Z",
       "tool_calls": [
         {
-          "id": "tool-6796cdae",
+          "id": "tool-6b71f68f",
           "step_index": 2,
           "agent_id": "manufacturer",
           "tool_name": "review_state",
           "arguments": {
-            "negotiation_id": "neg-01c9f998",
+            "negotiation_id": "neg-fd650c5c",
             "round_number": 1
           },
-          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: {'type': 'offer', 'price': 2.85, 'note': 'Initial offer above minimum price', 'from_agent_id': 'supplier'}.",
-          "created_at": "2026-04-10T10:42:46.931801Z"
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: {'type': 'offer', 'price': 2.1, 'note': 'Start close to buyer ceiling to maximize revenue', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T11:44:34.699945Z"
         },
         {
-          "id": "tool-da55763c",
+          "id": "tool-17fa207f",
           "step_index": 2,
           "agent_id": "manufacturer",
           "tool_name": "check_market_price",
           "arguments": {
-            "negotiation_id": "neg-01c9f998",
+            "negotiation_id": "neg-fd650c5c",
             "product": "Tomato Ketchup",
-            "observed_market_price": 3.6
+            "observed_market_price": 2.85
           },
-          "result_summary": "Observed market reference price: 3.60.",
-          "created_at": "2026-04-10T10:42:46.931814Z"
+          "result_summary": "Observed market reference price: 2.85.",
+          "created_at": "2026-04-10T11:44:34.699990Z"
         }
       ]
     },
     {
       "index": 3,
       "phase": "manufacturer_retailer",
-      "negotiation_id": "neg-ad3278d3",
+      "negotiation_id": "neg-9910ba22",
       "round_number": 1,
       "agent_id": "manufacturer",
       "kind": "offer",
-      "message": "Initial offer below max_buy_price to preserve margin",
+      "message": "Start at max buy price to preserve margin",
       "outcome": "Offer queued for delivery on the next turn.",
-      "proposed_price": 3.32,
-      "created_at": "2026-04-10T10:42:49.702680Z",
+      "proposed_price": 2.39,
+      "delivered_message": null,
+      "created_at": "2026-04-10T11:44:37.706606Z",
       "tool_calls": [
         {
-          "id": "tool-6bda7093",
+          "id": "tool-c7d0c6ad",
           "step_index": 3,
           "agent_id": "manufacturer",
           "tool_name": "review_state",
           "arguments": {
-            "negotiation_id": "neg-ad3278d3",
+            "negotiation_id": "neg-9910ba22",
             "round_number": 1
           },
           "result_summary": "Reviewed state for manufacturer_retailer round 1. Pending message: none.",
-          "created_at": "2026-04-10T10:42:48.543021Z"
+          "created_at": "2026-04-10T11:44:36.464825Z"
         },
         {
-          "id": "tool-d3cb1432",
+          "id": "tool-4787df88",
           "step_index": 3,
           "agent_id": "manufacturer",
           "tool_name": "check_market_price",
           "arguments": {
-            "negotiation_id": "neg-ad3278d3",
+            "negotiation_id": "neg-9910ba22",
             "product": "Tomato Ketchup",
-            "observed_market_price": 4.24
+            "observed_market_price": 3.26
           },
-          "result_summary": "Observed market reference price: 4.24.",
-          "created_at": "2026-04-10T10:42:48.543083Z"
+          "result_summary": "Observed market reference price: 3.26.",
+          "created_at": "2026-04-10T11:44:36.464881Z"
         }
       ]
     },
     {
       "index": 4,
       "phase": "manufacturer_retailer",
-      "negotiation_id": "neg-ad3278d3",
+      "negotiation_id": "neg-9910ba22",
       "round_number": 1,
       "agent_id": "retailer",
       "kind": "accept",
       "message": "Retailer accepts the pending offer.",
       "outcome": "Negotiation ends with an accepted deal.",
-      "proposed_price": 3.32,
-      "created_at": "2026-04-10T10:42:51.339209Z",
+      "proposed_price": 2.39,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.39,
+        "note": "Start at max buy price to preserve margin",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T11:44:43.848745Z",
       "tool_calls": [
         {
-          "id": "tool-45f8b91a",
+          "id": "tool-dc756379",
           "step_index": 4,
           "agent_id": "retailer",
           "tool_name": "review_state",
           "arguments": {
-            "negotiation_id": "neg-ad3278d3",
+            "negotiation_id": "neg-9910ba22",
             "round_number": 1
           },
-          "result_summary": "Reviewed state for manufacturer_retailer round 1. Pending message: {'type': 'offer', 'price': 3.32, 'note': 'Initial offer below max_buy_price to preserve margin', 'from_agent_id': 'manufacturer'}.",
-          "created_at": "2026-04-10T10:42:49.702898Z"
+          "result_summary": "Reviewed state for manufacturer_retailer round 1. Pending message: {'type': 'offer', 'price': 2.39, 'note': 'Start at max buy price to preserve margin', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T11:44:37.709779Z"
         },
         {
-          "id": "tool-bd81e7e8",
+          "id": "tool-7a9aee4b",
           "step_index": 4,
           "agent_id": "retailer",
           "tool_name": "check_market_price",
           "arguments": {
-            "negotiation_id": "neg-ad3278d3",
+            "negotiation_id": "neg-9910ba22",
             "product": "Tomato Ketchup",
-            "observed_market_price": 0.82
+            "observed_market_price": -0.11
           },
-          "result_summary": "Observed market reference price: 0.82.",
-          "created_at": "2026-04-10T10:42:49.702943Z"
+          "result_summary": "Observed market reference price: -0.11.",
+          "created_at": "2026-04-10T11:44:37.709823Z"
         }
       ]
     }
   ],
   "negotiations": [
     {
-      "id": "neg-01c9f998",
+      "id": "neg-fd650c5c",
       "phase": "supplier_manufacturer",
       "label": "Supplier to Manufacturer",
       "seller_agent_id": "supplier",
       "buyer_agent_id": "manufacturer",
       "status": "accepted",
-      "max_rounds": 5,
-      "quantity": 2849,
+      "max_rounds": 4,
+      "quantity": 2493,
       "rounds_completed": 1,
-      "opening_seller_offer": 2.85,
-      "opening_buyer_offer": 2.85,
-      "final_price": 2.85,
-      "outcome_summary": "Supplier to Manufacturer accepted at 2.85.",
+      "opening_seller_offer": 2.1,
+      "opening_buyer_offer": 2.1,
+      "final_price": 2.1,
+      "outcome_summary": "Supplier to Manufacturer accepted at 2.10.",
       "dependency_note": "Initial upstream procurement negotiation."
     },
     {
-      "id": "neg-ad3278d3",
+      "id": "neg-9910ba22",
       "phase": "manufacturer_retailer",
       "label": "Manufacturer to Retailer",
       "seller_agent_id": "manufacturer",
       "buyer_agent_id": "retailer",
       "status": "accepted",
-      "max_rounds": 5,
-      "quantity": 2849,
+      "max_rounds": 4,
+      "quantity": 2493,
       "rounds_completed": 1,
-      "opening_seller_offer": 3.32,
-      "opening_buyer_offer": 3.32,
-      "final_price": 3.32,
-      "outcome_summary": "Manufacturer to Retailer accepted at 3.32.",
+      "opening_seller_offer": 2.39,
+      "opening_buyer_offer": 2.39,
+      "final_price": 2.39,
+      "outcome_summary": "Manufacturer to Retailer accepted at 2.39.",
       "dependency_note": "Manufacturer sell floor uses the accepted upstream deal as its cost basis."
     }
   ],
   "diagnosis": {
-    "outcome": "Upstream deal accepted at 2.85 USD. Downstream deal accepted at 3.32 USD.",
-    "chain_effect": "The manufacturer carried a cost basis of 2.85 USD, which forced a downstream sell floor of 3.32 USD.",
+    "outcome": "Upstream deal accepted at 2.10 USD. Downstream deal accepted at 2.39 USD.",
+    "chain_effect": "The manufacturer carried a cost basis of 2.10 USD, which forced a downstream sell floor of 2.39 USD.",
     "key_risks": [
       "A costly upstream agreement compresses downstream negotiating room.",
-      "Round limits can force timeouts even when the gap is narrowing."
+      "Turn limits can force timeouts even when the gap is narrowing."
     ],
     "key_signals": [
       "Supplier-manufacturer status: accepted.",
       "Manufacturer-retailer status: accepted."
     ],
     "suggested_next_actions": [
-      "Tune reservation prices and round limits to test sensitivity.",
+      "Tune reservation prices and turn limits to test sensitivity.",
       "Add richer quantity or margin tradeoffs before introducing LLM behavior."
     ]
   },
-  "max_rounds_per_negotiation": 5,
+  "max_rounds_per_negotiation": 4,
   "notes": "Backend simulation with linked upstream and downstream negotiations.",
   "tags": [
     "simulation",

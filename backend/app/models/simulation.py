@@ -36,6 +36,12 @@ class SimulationBatchResult(BaseModel):
     runs: list[RunRecord]
 
 
+class SimulationBatchLaunchResult(BaseModel):
+    seed: int
+    count: int
+    runs: list[RunRecord]
+
+
 class RunDetailExportArtifacts(BaseModel):
     summary_path: str | None = None
     event_log_path: str | None = None

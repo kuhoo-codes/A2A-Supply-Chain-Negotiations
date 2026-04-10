@@ -1,0 +1,292 @@
+{
+  "id": "run-fa5c851ca8",
+  "title": "Bottle and Cap Cost Run Seed 11-2",
+  "status": "completed",
+  "scenario": "Tomato Ketchup in Northeast. Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation.",
+  "created_at": "2026-04-10T11:42:54.097031Z",
+  "updated_at": "2026-04-10T11:43:09.025221Z",
+  "product_context": {
+    "product_name": "Tomato Ketchup",
+    "product_category": "condiments",
+    "market_region": "Northeast",
+    "baseline_unit_price": 2.78,
+    "target_quantity": 1924,
+    "currency": "USD",
+    "demand_signal": "Retailers are asking for stable ketchup pricing even as packaging contracts are being repriced.",
+    "supply_signal": "Glass bottle and cap suppliers increased quoting pressure after freight and packaging resin costs moved up."
+  },
+  "agents": [
+    {
+      "id": "supplier",
+      "name": "Supplier",
+      "role": "supplier",
+      "objective": "Sell above the supplier reservation price while keeping volume committed.",
+      "reservation_prices": {
+        "min_sell_price": 2.58,
+        "max_buy_price": null
+      }
+    },
+    {
+      "id": "manufacturer",
+      "name": "Manufacturer",
+      "role": "manufacturer",
+      "objective": "Buy below the procurement ceiling and preserve downstream margin.",
+      "reservation_prices": {
+        "min_sell_price": 3.22,
+        "max_buy_price": 2.83
+      }
+    },
+    {
+      "id": "retailer",
+      "name": "Retailer",
+      "role": "retailer",
+      "objective": "Buy enough units without exceeding the retail reservation price.",
+      "reservation_prices": {
+        "min_sell_price": null,
+        "max_buy_price": 3.43
+      }
+    }
+  ],
+  "phases": [
+    {
+      "name": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "order": 1,
+      "description": "The supplier negotiates an upstream unit price with the manufacturer."
+    },
+    {
+      "name": "manufacturer_retailer",
+      "label": "Manufacturer to Retailer",
+      "order": 2,
+      "description": "The manufacturer negotiates a downstream unit price with the retailer after the upstream deal sets its cost basis."
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-eb8fb74c",
+      "round_number": 1,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "Opening offer at 2.80.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.8,
+      "delivered_message": null,
+      "created_at": "2026-04-10T11:42:58.055984Z",
+      "tool_calls": [
+        {
+          "id": "tool-055feab4",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-eb8fb74c",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: none.",
+          "created_at": "2026-04-10T11:42:54.842536Z"
+        },
+        {
+          "id": "tool-2b20141f",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-eb8fb74c",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 6.71
+          },
+          "result_summary": "Observed market reference price: 6.71.",
+          "created_at": "2026-04-10T11:42:54.842591Z"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-eb8fb74c",
+      "round_number": 1,
+      "agent_id": "manufacturer",
+      "kind": "accept",
+      "message": "Accepted at 2.80.",
+      "outcome": "Negotiation ends with an accepted deal.",
+      "proposed_price": 2.8,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.8,
+        "note": "Opening offer at 2.80.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T11:43:02.787925Z",
+      "tool_calls": [
+        {
+          "id": "tool-cf634fc7",
+          "step_index": 2,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-eb8fb74c",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: {'type': 'offer', 'price': 2.8, 'note': 'Opening offer at 2.80.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T11:42:58.058112Z"
+        },
+        {
+          "id": "tool-05d0f9b5",
+          "step_index": 2,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-eb8fb74c",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 3.55
+          },
+          "result_summary": "Observed market reference price: 3.55.",
+          "created_at": "2026-04-10T11:42:58.058142Z"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "phase": "manufacturer_retailer",
+      "negotiation_id": "neg-3e9702a5",
+      "round_number": 1,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "Opening offer with room to move.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 3.22,
+      "delivered_message": null,
+      "created_at": "2026-04-10T11:43:04.917639Z",
+      "tool_calls": [
+        {
+          "id": "tool-eb1b14f9",
+          "step_index": 3,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-3e9702a5",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for manufacturer_retailer round 1. Pending message: none.",
+          "created_at": "2026-04-10T11:43:02.795888Z"
+        },
+        {
+          "id": "tool-705861dc",
+          "step_index": 3,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-3e9702a5",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 4.08
+          },
+          "result_summary": "Observed market reference price: 4.08.",
+          "created_at": "2026-04-10T11:43:02.795907Z"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "phase": "manufacturer_retailer",
+      "negotiation_id": "neg-3e9702a5",
+      "round_number": 1,
+      "agent_id": "retailer",
+      "kind": "accept",
+      "message": "Accepting your offer.",
+      "outcome": "Negotiation ends with an accepted deal.",
+      "proposed_price": 3.22,
+      "delivered_message": {
+        "type": "offer",
+        "price": 3.22,
+        "note": "Opening offer with room to move.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T11:43:09.020045Z",
+      "tool_calls": [
+        {
+          "id": "tool-163e2db7",
+          "step_index": 4,
+          "agent_id": "retailer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-3e9702a5",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for manufacturer_retailer round 1. Pending message: {'type': 'offer', 'price': 3.22, 'note': 'Opening offer with room to move.', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T11:43:04.919079Z"
+        },
+        {
+          "id": "tool-5af026ea",
+          "step_index": 4,
+          "agent_id": "retailer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-3e9702a5",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 0.72
+          },
+          "result_summary": "Observed market reference price: 0.72.",
+          "created_at": "2026-04-10T11:43:04.919098Z"
+        }
+      ]
+    }
+  ],
+  "negotiations": [
+    {
+      "id": "neg-eb8fb74c",
+      "phase": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "seller_agent_id": "supplier",
+      "buyer_agent_id": "manufacturer",
+      "status": "accepted",
+      "max_rounds": 5,
+      "quantity": 1924,
+      "rounds_completed": 1,
+      "opening_seller_offer": 2.8,
+      "opening_buyer_offer": 2.8,
+      "final_price": 2.8,
+      "outcome_summary": "Supplier to Manufacturer accepted at 2.80.",
+      "dependency_note": "Initial upstream procurement negotiation."
+    },
+    {
+      "id": "neg-3e9702a5",
+      "phase": "manufacturer_retailer",
+      "label": "Manufacturer to Retailer",
+      "seller_agent_id": "manufacturer",
+      "buyer_agent_id": "retailer",
+      "status": "accepted",
+      "max_rounds": 5,
+      "quantity": 1924,
+      "rounds_completed": 1,
+      "opening_seller_offer": 3.22,
+      "opening_buyer_offer": 3.22,
+      "final_price": 3.22,
+      "outcome_summary": "Manufacturer to Retailer accepted at 3.22.",
+      "dependency_note": "Manufacturer sell floor uses the accepted upstream deal as its cost basis."
+    }
+  ],
+  "diagnosis": {
+    "outcome": "Upstream deal accepted at 2.80 USD. Downstream deal accepted at 3.22 USD.",
+    "chain_effect": "The manufacturer carried a cost basis of 2.80 USD, which forced a downstream sell floor of 3.22 USD.",
+    "key_risks": [
+      "A costly upstream agreement compresses downstream negotiating room.",
+      "Turn limits can force timeouts even when the gap is narrowing."
+    ],
+    "key_signals": [
+      "Supplier-manufacturer status: accepted.",
+      "Manufacturer-retailer status: accepted."
+    ],
+    "suggested_next_actions": [
+      "Tune reservation prices and turn limits to test sensitivity.",
+      "Add richer quantity or margin tradeoffs before introducing LLM behavior."
+    ]
+  },
+  "max_rounds_per_negotiation": 5,
+  "notes": "Backend simulation with linked upstream and downstream negotiations.",
+  "tags": [
+    "simulation",
+    "supply-chain"
+  ]
+}

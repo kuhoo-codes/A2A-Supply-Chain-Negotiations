@@ -1,21 +1,21 @@
 import { NextResponse } from "next/server";
 
-import { getApiBaseUrl } from "../../../../lib/api";
-import {
-  SimulationBatchLaunchResult,
-  SimulationSeedRequest,
-} from "../../../../lib/api-types";
+import { getApiBaseUrl } from "../../../../../lib/api";
+import { RunDetailResponse } from "../../../../../lib/api-types";
 
 
-export async function POST(request: Request) {
+type RouteContext = {
+  params: Promise<{
+    id: string;
+  }>;
+};
+
+
+export async function GET(_: Request, context: RouteContext) {
+  const { id } = await context.params;
+
   try {
-    const body = (await request.json()) as SimulationSeedRequest;
-    const response = await fetch(`${getApiBaseUrl()}/simulation/run`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+    const response = await fetch(`${getApiBaseUrl()}/runs/${id}/detail`, {
       cache: "no-store",
     });
 
@@ -34,13 +34,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const data = (await response.json()) as SimulationBatchLaunchResult;
+    const data = (await response.json()) as RunDetailResponse;
     return NextResponse.json({ data, error: null });
   } catch {
     return NextResponse.json(
       {
         data: null,
-        error: "Unable to reach the backend simulation endpoint.",
+        error: "Unable to reach the backend run detail endpoint.",
       },
       { status: 503 },
     );

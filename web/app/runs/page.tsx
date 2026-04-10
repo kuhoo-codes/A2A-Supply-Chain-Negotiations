@@ -1,5 +1,6 @@
 import { EmptyState } from "../../components/empty-state";
 import { ErrorState } from "../../components/error-state";
+import { LiveRunsRefresh } from "../../components/live-runs-refresh";
 import { RunSeedForm } from "../../components/run-seed-form";
 import { RunCard } from "../../components/run-card";
 import { getRuns } from "../../lib/api";
@@ -20,6 +21,7 @@ export default async function RunsPage() {
       <div className="page-actions">
         <RunSeedForm />
       </div>
+      <LiveRunsRefresh />
 
       {result.error ? (
         <ErrorState title="Unable to load runs" message={result.error} />
