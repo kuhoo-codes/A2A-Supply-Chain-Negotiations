@@ -36,6 +36,7 @@ class RunEventType(StrEnum):
     AGENT_TURN = "agent_turn"
     TOOL_CALL = "tool_call"
     MARKET_PRICE_CHECK = "market_price_check"
+    MARKET_SHOCK = "market_shock"
     OFFER_MADE = "offer_made"
     OFFER_RECEIVED = "offer_received"
     ACCEPT = "accept"
@@ -147,6 +148,10 @@ class RunEvent(BaseModel):
     reasoning_summary: str | None = None
     negotiation_id: str | None = None
     tool_name: str | None = None
+    previous_market_price: float | None = None
+    shock_type: str | None = None
+    shock_multiplier: float | None = None
+    shock_headline: str | None = None
 
 
 class RunEventLog(BaseModel):

@@ -1,0 +1,832 @@
+{
+  "id": "run-346dd60114",
+  "title": "Tomato Harvest Pricing Run Seed 34-1",
+  "status": "completed",
+  "scenario": "Tomato Ketchup in California. Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation.",
+  "created_at": "2026-04-10T13:04:01.570510Z",
+  "updated_at": "2026-04-10T13:05:13.959692Z",
+  "product_context": {
+    "product_name": "Tomato Ketchup",
+    "product_category": "condiments",
+    "market_region": "California",
+    "baseline_unit_price": 2.39,
+    "target_quantity": 2341,
+    "currency": "USD",
+    "demand_signal": "Retail ketchup demand is steady, but wholesale buyers want price protection before peak tomato procurement.",
+    "supply_signal": "Tomato harvest yields are uneven across growing regions, putting pressure on paste input pricing."
+  },
+  "agents": [
+    {
+      "id": "supplier",
+      "name": "Supplier",
+      "role": "supplier",
+      "objective": "Sell above the supplier reservation price while keeping volume committed.",
+      "reservation_prices": {
+        "min_sell_price": 2.06,
+        "max_buy_price": null
+      }
+    },
+    {
+      "id": "manufacturer",
+      "name": "Manufacturer",
+      "role": "manufacturer",
+      "objective": "Buy below the procurement ceiling and preserve downstream margin.",
+      "reservation_prices": {
+        "min_sell_price": 2.66,
+        "max_buy_price": 2.4
+      }
+    },
+    {
+      "id": "retailer",
+      "name": "Retailer",
+      "role": "retailer",
+      "objective": "Buy enough units without exceeding the retail reservation price.",
+      "reservation_prices": {
+        "min_sell_price": null,
+        "max_buy_price": 2.94
+      }
+    }
+  ],
+  "phases": [
+    {
+      "name": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "order": 1,
+      "description": "The supplier negotiates an upstream unit price with the manufacturer."
+    },
+    {
+      "name": "manufacturer_retailer",
+      "label": "Manufacturer to Retailer",
+      "order": 2,
+      "description": "The manufacturer negotiates a downstream unit price with the retailer after the upstream deal sets its cost basis."
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-1fb284eb",
+      "round_number": 1,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "Thanks for starting the discussion. Based on current market bounds and our need to protect supply reliability and committed volume, I can open at $2.34 per unit. That price leaves some room to work together if you can support a solid volume commitment and efficient order planning. As the supplier, I need to begin above my minimum acceptable level while signaling flexibility for a serious buyer. This opening is competitive within the stated market range and sets up a practical path toward agreement over the remaining rounds.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.34,
+      "delivered_message": null,
+      "created_at": "2026-04-10T13:04:06.100684Z",
+      "tool_calls": [
+        {
+          "id": "tool-5e9ddefe",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: none.",
+          "created_at": "2026-04-10T13:04:02.651488Z"
+        },
+        {
+          "id": "tool-39d0caad",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 6.23
+          },
+          "result_summary": "Observed market reference price: 6.23.",
+          "created_at": "2026-04-10T13:04:02.651560Z"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-1fb284eb",
+      "round_number": 1,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I appreciate the opening and agree there is room to work toward a practical agreement. To protect our downstream margin and stay disciplined on procurement, I can respond at $2.18 per unit, especially if we can pair that with predictable volume and efficient scheduling. That keeps us within a workable range early while showing we are serious about moving forward quickly. The supplier's $2.34 offer is below our maximum buy price of $2.40, so there is no need to reject it outright. However, as the buyer we should negotiate for additional margin and anchor lower while remaining within market bounds and leaving room for a mutually acceptable settlement in later rounds.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.18,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.34,
+        "note": "Thanks for starting the discussion. Based on current market bounds and our need to protect supply reliability and committed volume, I can open at $2.34 per unit. That price leaves some room to work together if you can support a solid volume commitment and efficient order planning. As the supplier, I need to begin above my minimum acceptable level while signaling flexibility for a serious buyer. This opening is competitive within the stated market range and sets up a practical path toward agreement over the remaining rounds.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T13:04:11.783669Z",
+      "tool_calls": [
+        {
+          "id": "tool-eac1acdd",
+          "step_index": 2,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: {'type': 'offer', 'price': 2.34, 'note': 'Thanks for starting the discussion. Based on current market bounds and our need to protect supply reliability and committed volume, I can open at $2.34 per unit. That price leaves some room to work together if you can support a solid volume commitment and efficient order planning. As the supplier, I need to begin above my minimum acceptable level while signaling flexibility for a serious buyer. This opening is competitive within the stated market range and sets up a practical path toward agreement over the remaining rounds.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T13:04:06.110270Z"
+        },
+        {
+          "id": "tool-7cb9e583",
+          "step_index": 2,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 3.09
+          },
+          "result_summary": "Observed market reference price: 3.09.",
+          "created_at": "2026-04-10T13:04:06.110732Z"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-1fb284eb",
+      "round_number": 2,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "Thank you for the constructive move to $2.18 and for signaling flexibility around volume and scheduling. We can narrow the gap by revising our position to $2.29 per unit, which reflects a real concession from our prior $2.34 while still protecting our minimum margin and supporting reliable supply. If you can confirm predictable volume and efficient call-offs, this level gives us a practical path to closing quickly. The buyer's offer is above our reservation floor, but there is still room to improve price while keeping momentum. A counter at $2.29 makes a measured concession, stays well within the buyer's ceiling, and preserves margin without risking the negotiation.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.29,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.18,
+        "note": "I appreciate the opening and agree there is room to work toward a practical agreement. To protect our downstream margin and stay disciplined on procurement, I can respond at $2.18 per unit, especially if we can pair that with predictable volume and efficient scheduling. That keeps us within a workable range early while showing we are serious about moving forward quickly. The supplier's $2.34 offer is below our maximum buy price of $2.40, so there is no need to reject it outright. However, as the buyer we should negotiate for additional margin and anchor lower while remaining within market bounds and leaving room for a mutually acceptable settlement in later rounds.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T13:04:15.775600Z",
+      "tool_calls": [
+        {
+          "id": "tool-38a9888b",
+          "step_index": 3,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "round_number": 2
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 2. Pending message: {'type': 'offer', 'price': 2.18, 'note': \"I appreciate the opening and agree there is room to work toward a practical agreement. To protect our downstream margin and stay disciplined on procurement, I can respond at $2.18 per unit, especially if we can pair that with predictable volume and efficient scheduling. That keeps us within a workable range early while showing we are serious about moving forward quickly. The supplier's $2.34 offer is below our maximum buy price of $2.40, so there is no need to reject it outright. However, as the buyer we should negotiate for additional margin and anchor lower while remaining within market bounds and leaving room for a mutually acceptable settlement in later rounds.\", 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T13:04:11.786660Z"
+        },
+        {
+          "id": "tool-8def2092",
+          "step_index": 3,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 6.74
+          },
+          "result_summary": "Observed market reference price: 6.74.",
+          "created_at": "2026-04-10T13:04:11.786702Z"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-1fb284eb",
+      "round_number": 2,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I appreciate the movement from $2.34 to $2.29 and your willingness to work toward a close. To keep this within our procurement targets while recognizing your concession, I can move to $2.22 per unit if we pair it with predictable volume and efficient release scheduling. That narrows the gap materially from our last position and gives us a practical basis to finalize quickly. The supplier's $2.29 offer is acceptable in principle because it is below our $2.40 ceiling, but there is still room to improve economics and preserve downstream margin. A counter at $2.22 makes a measured concession from $2.18, stays realistic relative to the seller's move, and keeps momentum without conceding too much too early.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.22,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.29,
+        "note": "Thank you for the constructive move to $2.18 and for signaling flexibility around volume and scheduling. We can narrow the gap by revising our position to $2.29 per unit, which reflects a real concession from our prior $2.34 while still protecting our minimum margin and supporting reliable supply. If you can confirm predictable volume and efficient call-offs, this level gives us a practical path to closing quickly. The buyer's offer is above our reservation floor, but there is still room to improve price while keeping momentum. A counter at $2.29 makes a measured concession, stays well within the buyer's ceiling, and preserves margin without risking the negotiation.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T13:04:20.177807Z",
+      "tool_calls": [
+        {
+          "id": "tool-a7b12abf",
+          "step_index": 4,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "round_number": 2
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 2. Pending message: {'type': 'offer', 'price': 2.29, 'note': \"Thank you for the constructive move to $2.18 and for signaling flexibility around volume and scheduling. We can narrow the gap by revising our position to $2.29 per unit, which reflects a real concession from our prior $2.34 while still protecting our minimum margin and supporting reliable supply. If you can confirm predictable volume and efficient call-offs, this level gives us a practical path to closing quickly. The buyer's offer is above our reservation floor, but there is still room to improve price while keeping momentum. A counter at $2.29 makes a measured concession, stays well within the buyer's ceiling, and preserves margin without risking the negotiation.\", 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T13:04:15.778518Z"
+        },
+        {
+          "id": "tool-2ccd3195",
+          "step_index": 4,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 3.44
+          },
+          "result_summary": "Observed market reference price: 3.44.",
+          "created_at": "2026-04-10T13:04:15.778547Z"
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-1fb284eb",
+      "round_number": 3,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "I appreciate the constructive move to $2.22 and the focus on predictable volume and efficient release scheduling. To help close this out quickly while preserving our cost position, I can narrow further to $2.26 per unit if we have the committed volume and orderly releases you mentioned. That is a meaningful concession from $2.29 and keeps us in a range that works for both sides given the remaining gap. The buyer moved closer, and there is still room to trade a modest price concession for stronger commitment terms. A counter at $2.26 keeps the negotiation above our reservation price while maintaining momentum toward agreement.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.26,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.22,
+        "note": "I appreciate the movement from $2.34 to $2.29 and your willingness to work toward a close. To keep this within our procurement targets while recognizing your concession, I can move to $2.22 per unit if we pair it with predictable volume and efficient release scheduling. That narrows the gap materially from our last position and gives us a practical basis to finalize quickly. The supplier's $2.29 offer is acceptable in principle because it is below our $2.40 ceiling, but there is still room to improve economics and preserve downstream margin. A counter at $2.22 makes a measured concession from $2.18, stays realistic relative to the seller's move, and keeps momentum without conceding too much too early.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T13:04:26.970735Z",
+      "tool_calls": [
+        {
+          "id": "tool-0c92f6c0",
+          "step_index": 5,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "round_number": 3
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 3. Pending message: {'type': 'offer', 'price': 2.22, 'note': \"I appreciate the movement from $2.34 to $2.29 and your willingness to work toward a close. To keep this within our procurement targets while recognizing your concession, I can move to $2.22 per unit if we pair it with predictable volume and efficient release scheduling. That narrows the gap materially from our last position and gives us a practical basis to finalize quickly. The supplier's $2.29 offer is acceptable in principle because it is below our $2.40 ceiling, but there is still room to improve economics and preserve downstream margin. A counter at $2.22 makes a measured concession from $2.18, stays realistic relative to the seller's move, and keeps momentum without conceding too much too early.\", 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T13:04:20.180396Z"
+        },
+        {
+          "id": "tool-acfc3be5",
+          "step_index": 5,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 7.09
+          },
+          "result_summary": "Observed market reference price: 7.09.",
+          "created_at": "2026-04-10T13:04:20.180430Z"
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-1fb284eb",
+      "round_number": 3,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I appreciate the move to $2.26 and the flexibility tied to committed volume and orderly releases. We are very close, but I still need to protect our downstream margin, so I can move to $2.24 per unit if we lock in the volume commitment and maintain the release discipline discussed. That narrows the gap to just $0.02 and is intended as a serious step to get this finalized quickly. This keeps the purchase below our ceiling while responding constructively to the supplier's concession. A small increase from our last offer signals willingness to close without giving up more margin than necessary.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.24,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.26,
+        "note": "I appreciate the constructive move to $2.22 and the focus on predictable volume and efficient release scheduling. To help close this out quickly while preserving our cost position, I can narrow further to $2.26 per unit if we have the committed volume and orderly releases you mentioned. That is a meaningful concession from $2.29 and keeps us in a range that works for both sides given the remaining gap. The buyer moved closer, and there is still room to trade a modest price concession for stronger commitment terms. A counter at $2.26 keeps the negotiation above our reservation price while maintaining momentum toward agreement.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T13:04:30.487388Z",
+      "tool_calls": [
+        {
+          "id": "tool-40406845",
+          "step_index": 6,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "round_number": 3
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 3. Pending message: {'type': 'offer', 'price': 2.26, 'note': 'I appreciate the constructive move to $2.22 and the focus on predictable volume and efficient release scheduling. To help close this out quickly while preserving our cost position, I can narrow further to $2.26 per unit if we have the committed volume and orderly releases you mentioned. That is a meaningful concession from $2.29 and keeps us in a range that works for both sides given the remaining gap. The buyer moved closer, and there is still room to trade a modest price concession for stronger commitment terms. A counter at $2.26 keeps the negotiation above our reservation price while maintaining momentum toward agreement.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T13:04:26.973077Z"
+        },
+        {
+          "id": "tool-c557e805",
+          "step_index": 6,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 3.81
+          },
+          "result_summary": "Observed market reference price: 3.81.",
+          "created_at": "2026-04-10T13:04:26.973100Z"
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-1fb284eb",
+      "round_number": 4,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "Thank you for the constructive move to $2.24 and for confirming the volume commitment and release discipline. To close this out quickly, I can meet you one cent lower than my last position at $2.25 per unit, which fairly reflects the committed volume while still covering our production and service requirements. This is a final bridging step from our side, and with the operational terms aligned, it should give us a workable agreement point. The buyer is very close to the seller's prior offer, and a small concession preserves margin while increasing the chance of immediate agreement before the negotiation window closes.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.25,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.24,
+        "note": "I appreciate the move to $2.26 and the flexibility tied to committed volume and orderly releases. We are very close, but I still need to protect our downstream margin, so I can move to $2.24 per unit if we lock in the volume commitment and maintain the release discipline discussed. That narrows the gap to just $0.02 and is intended as a serious step to get this finalized quickly. This keeps the purchase below our ceiling while responding constructively to the supplier's concession. A small increase from our last offer signals willingness to close without giving up more margin than necessary.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T13:04:34.267904Z",
+      "tool_calls": [
+        {
+          "id": "tool-ad5e367a",
+          "step_index": 7,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "round_number": 4
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 4. Pending message: {'type': 'offer', 'price': 2.24, 'note': \"I appreciate the move to $2.26 and the flexibility tied to committed volume and orderly releases. We are very close, but I still need to protect our downstream margin, so I can move to $2.24 per unit if we lock in the volume commitment and maintain the release discipline discussed. That narrows the gap to just $0.02 and is intended as a serious step to get this finalized quickly. This keeps the purchase below our ceiling while responding constructively to the supplier's concession. A small increase from our last offer signals willingness to close without giving up more margin than necessary.\", 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T13:04:30.488940Z"
+        },
+        {
+          "id": "tool-c4f28081",
+          "step_index": 7,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 7.46
+          },
+          "result_summary": "Observed market reference price: 7.46.",
+          "created_at": "2026-04-10T13:04:30.488954Z"
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-1fb284eb",
+      "round_number": 4,
+      "agent_id": "manufacturer",
+      "kind": "accept",
+      "message": "Thank you for the final move to $2.25. That price remains within our procurement limit and is close enough to our last position to preserve the downstream margin we need, so we can accept and move forward on the agreed volume and release terms. The supplier's offer of $2.25 is below our maximum buy price of $2.40 and only one cent above our last offer of $2.24. With the negotiation window closing and operational terms already aligned, accepting now secures supply at a workable cost without risking delay over a minimal price gap.",
+      "outcome": "Negotiation ends with an accepted deal.",
+      "proposed_price": 2.25,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.25,
+        "note": "Thank you for the constructive move to $2.24 and for confirming the volume commitment and release discipline. To close this out quickly, I can meet you one cent lower than my last position at $2.25 per unit, which fairly reflects the committed volume while still covering our production and service requirements. This is a final bridging step from our side, and with the operational terms aligned, it should give us a workable agreement point. The buyer is very close to the seller's prior offer, and a small concession preserves margin while increasing the chance of immediate agreement before the negotiation window closes.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T13:04:39.590598Z",
+      "tool_calls": [
+        {
+          "id": "tool-7ffe4ae2",
+          "step_index": 8,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "round_number": 4
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 4. Pending message: {'type': 'offer', 'price': 2.25, 'note': \"Thank you for the constructive move to $2.24 and for confirming the volume commitment and release discipline. To close this out quickly, I can meet you one cent lower than my last position at $2.25 per unit, which fairly reflects the committed volume while still covering our production and service requirements. This is a final bridging step from our side, and with the operational terms aligned, it should give us a workable agreement point. The buyer is very close to the seller's prior offer, and a small concession preserves margin while increasing the chance of immediate agreement before the negotiation window closes.\", 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T13:04:34.271199Z"
+        },
+        {
+          "id": "tool-9c1fe3be",
+          "step_index": 8,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-1fb284eb",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 4.2
+          },
+          "result_summary": "Observed market reference price: 4.20.",
+          "created_at": "2026-04-10T13:04:34.271232Z"
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "phase": "manufacturer_retailer",
+      "negotiation_id": "neg-df8687e8",
+      "round_number": 1,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "Thanks for opening the discussion. We can start at $2.92 per unit, which reflects current production and fulfillment costs while still leaving room to build a workable partnership. If you can commit to steady volume and efficient ordering, we may be able to discuss some movement from here in the next round. Opening from the seller side near the market ceiling preserves margin and creates room for concessions in later rounds.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.92,
+      "delivered_message": null,
+      "created_at": "2026-04-10T13:04:43.649880Z",
+      "tool_calls": [
+        {
+          "id": "tool-0865a568",
+          "step_index": 9,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for manufacturer_retailer round 1. Pending message: none.",
+          "created_at": "2026-04-10T13:04:39.594406Z"
+        },
+        {
+          "id": "tool-31eb2f67",
+          "step_index": 9,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 3.55
+          },
+          "result_summary": "Observed market reference price: 3.55.",
+          "created_at": "2026-04-10T13:04:39.594420Z"
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "phase": "manufacturer_retailer",
+      "negotiation_id": "neg-df8687e8",
+      "round_number": 1,
+      "agent_id": "retailer",
+      "kind": "offer",
+      "message": "Thanks for the opening offer. At $2.92 you are still very close to our ceiling, so to make the unit economics work on the retail side we would need to be meaningfully lower; we can offer $2.79 per unit if we can pair that with steady volume and clean ordering cadence. That gives you room above the market floor while leaving us enough margin to move forward toward a repeat relationship. The seller's offer is technically within our maximum buy price, but it leaves almost no buffer for retail margin in the first round. A counter at $2.79 signals serious intent, stays within the market range, and preserves room for both sides to make measured concessions over the remaining rounds.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.79,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.92,
+        "note": "Thanks for opening the discussion. We can start at $2.92 per unit, which reflects current production and fulfillment costs while still leaving room to build a workable partnership. If you can commit to steady volume and efficient ordering, we may be able to discuss some movement from here in the next round. Opening from the seller side near the market ceiling preserves margin and creates room for concessions in later rounds.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T13:04:47.553744Z",
+      "tool_calls": [
+        {
+          "id": "tool-ea0b2fa2",
+          "step_index": 10,
+          "agent_id": "retailer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for manufacturer_retailer round 1. Pending message: {'type': 'offer', 'price': 2.92, 'note': 'Thanks for opening the discussion. We can start at $2.92 per unit, which reflects current production and fulfillment costs while still leaving room to build a workable partnership. If you can commit to steady volume and efficient ordering, we may be able to discuss some movement from here in the next round. Opening from the seller side near the market ceiling preserves margin and creates room for concessions in later rounds.', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T13:04:43.653133Z"
+        },
+        {
+          "id": "tool-77e9bd68",
+          "step_index": 10,
+          "agent_id": "retailer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 0.42
+          },
+          "result_summary": "Observed market reference price: 0.42.",
+          "created_at": "2026-04-10T13:04:43.653152Z"
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "phase": "manufacturer_retailer",
+      "negotiation_id": "neg-df8687e8",
+      "round_number": 2,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "We appreciate the serious move to $2.79 and the emphasis on steady volume, but at that level we would be giving up too much of the manufacturing margin this early. To keep the program viable on our side while still showing flexibility from our $2.92 opening, we can come down to $2.88 per unit. If the volume and ordering cadence are as consistent as you suggest, that gives us a workable starting point and leaves room to build into a repeat arrangement. Their offer is below our minimum sell price of $2.66? No, it is above floor, but as the manufacturer our objective is to preserve margin and avoid conceding too quickly. A measured counter near our last offer is the best move this round because it signals willingness to deal without collapsing price unnecessarily.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.88,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.79,
+        "note": "Thanks for the opening offer. At $2.92 you are still very close to our ceiling, so to make the unit economics work on the retail side we would need to be meaningfully lower; we can offer $2.79 per unit if we can pair that with steady volume and clean ordering cadence. That gives you room above the market floor while leaving us enough margin to move forward toward a repeat relationship. The seller's offer is technically within our maximum buy price, but it leaves almost no buffer for retail margin in the first round. A counter at $2.79 signals serious intent, stays within the market range, and preserves room for both sides to make measured concessions over the remaining rounds.",
+        "from_agent_id": "retailer"
+      },
+      "created_at": "2026-04-10T13:04:51.715042Z",
+      "tool_calls": [
+        {
+          "id": "tool-4846cf53",
+          "step_index": 11,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "round_number": 2
+          },
+          "result_summary": "Reviewed state for manufacturer_retailer round 2. Pending message: {'type': 'offer', 'price': 2.79, 'note': \"Thanks for the opening offer. At $2.92 you are still very close to our ceiling, so to make the unit economics work on the retail side we would need to be meaningfully lower; we can offer $2.79 per unit if we can pair that with steady volume and clean ordering cadence. That gives you room above the market floor while leaving us enough margin to move forward toward a repeat relationship. The seller's offer is technically within our maximum buy price, but it leaves almost no buffer for retail margin in the first round. A counter at $2.79 signals serious intent, stays within the market range, and preserves room for both sides to make measured concessions over the remaining rounds.\", 'from_agent_id': 'retailer'}.",
+          "created_at": "2026-04-10T13:04:47.555037Z"
+        },
+        {
+          "id": "tool-3b7f7b10",
+          "step_index": 11,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 4.07
+          },
+          "result_summary": "Observed market reference price: 4.07.",
+          "created_at": "2026-04-10T13:04:47.555049Z"
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "phase": "manufacturer_retailer",
+      "negotiation_id": "neg-df8687e8",
+      "round_number": 2,
+      "agent_id": "retailer",
+      "kind": "offer",
+      "message": "Thanks for moving down to $2.88; that keeps us in a workable zone and shows real intent to close. We still need a bit more room to protect our retail margin and stay disciplined against our buy ceiling, so we can increase our offer to $2.83 per unit. That narrows the gap meaningfully from our $2.79 while signaling that we are serious about putting steady volume behind this program if we can finalize near this level. The seller's offer is below the buyer's maximum of $2.94, so acceptance is possible, but there is still room to negotiate within the bargaining range. A moderate concession to $2.83 is credible, improves the chance of agreement, and preserves margin better than accepting $2.88 immediately.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.83,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.88,
+        "note": "We appreciate the serious move to $2.79 and the emphasis on steady volume, but at that level we would be giving up too much of the manufacturing margin this early. To keep the program viable on our side while still showing flexibility from our $2.92 opening, we can come down to $2.88 per unit. If the volume and ordering cadence are as consistent as you suggest, that gives us a workable starting point and leaves room to build into a repeat arrangement. Their offer is below our minimum sell price of $2.66? No, it is above floor, but as the manufacturer our objective is to preserve margin and avoid conceding too quickly. A measured counter near our last offer is the best move this round because it signals willingness to deal without collapsing price unnecessarily.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T13:04:56.118365Z",
+      "tool_calls": [
+        {
+          "id": "tool-29d5719d",
+          "step_index": 12,
+          "agent_id": "retailer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "round_number": 2
+          },
+          "result_summary": "Reviewed state for manufacturer_retailer round 2. Pending message: {'type': 'offer', 'price': 2.88, 'note': 'We appreciate the serious move to $2.79 and the emphasis on steady volume, but at that level we would be giving up too much of the manufacturing margin this early. To keep the program viable on our side while still showing flexibility from our $2.92 opening, we can come down to $2.88 per unit. If the volume and ordering cadence are as consistent as you suggest, that gives us a workable starting point and leaves room to build into a repeat arrangement. Their offer is below our minimum sell price of $2.66? No, it is above floor, but as the manufacturer our objective is to preserve margin and avoid conceding too quickly. A measured counter near our last offer is the best move this round because it signals willingness to deal without collapsing price unnecessarily.', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T13:04:51.719461Z"
+        },
+        {
+          "id": "tool-cbf4984d",
+          "step_index": 12,
+          "agent_id": "retailer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 0.78
+          },
+          "result_summary": "Observed market reference price: 0.78.",
+          "created_at": "2026-04-10T13:04:51.719480Z"
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "phase": "manufacturer_retailer",
+      "negotiation_id": "neg-df8687e8",
+      "round_number": 3,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I appreciate the movement to $2.83 and agree we are in a workable range, but $2.83 is below the level we can responsibly commit to on our side. Given our production economics and the need to keep the program sustainable at volume, we can hold at $2.88 per unit as our best price. That keeps us within the market range, reflects a fair midpoint given the value and reliability we are providing, and leaves room to close this quickly if you are ready. The buyer's offer of $2.83 is above our floor of $2.66, so agreement is possible, but accepting it would concede more margin than necessary with turns remaining. Reaffirming $2.88 preserves downstream margin better than accepting the buyer's price while still staying within the buyer's ceiling of $2.94.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.88,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.83,
+        "note": "Thanks for moving down to $2.88; that keeps us in a workable zone and shows real intent to close. We still need a bit more room to protect our retail margin and stay disciplined against our buy ceiling, so we can increase our offer to $2.83 per unit. That narrows the gap meaningfully from our $2.79 while signaling that we are serious about putting steady volume behind this program if we can finalize near this level. The seller's offer is below the buyer's maximum of $2.94, so acceptance is possible, but there is still room to negotiate within the bargaining range. A moderate concession to $2.83 is credible, improves the chance of agreement, and preserves margin better than accepting $2.88 immediately.",
+        "from_agent_id": "retailer"
+      },
+      "created_at": "2026-04-10T13:05:01.451151Z",
+      "tool_calls": [
+        {
+          "id": "tool-80f56de5",
+          "step_index": 13,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "round_number": 3
+          },
+          "result_summary": "Reviewed state for manufacturer_retailer round 3. Pending message: {'type': 'offer', 'price': 2.83, 'note': \"Thanks for moving down to $2.88; that keeps us in a workable zone and shows real intent to close. We still need a bit more room to protect our retail margin and stay disciplined against our buy ceiling, so we can increase our offer to $2.83 per unit. That narrows the gap meaningfully from our $2.79 while signaling that we are serious about putting steady volume behind this program if we can finalize near this level. The seller's offer is below the buyer's maximum of $2.94, so acceptance is possible, but there is still room to negotiate within the bargaining range. A moderate concession to $2.83 is credible, improves the chance of agreement, and preserves margin better than accepting $2.88 immediately.\", 'from_agent_id': 'retailer'}.",
+          "created_at": "2026-04-10T13:04:56.125512Z"
+        },
+        {
+          "id": "tool-f9c13899",
+          "step_index": 13,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 4.43
+          },
+          "result_summary": "Observed market reference price: 4.43.",
+          "created_at": "2026-04-10T13:04:56.125548Z"
+        }
+      ]
+    },
+    {
+      "index": 14,
+      "phase": "manufacturer_retailer",
+      "negotiation_id": "neg-df8687e8",
+      "round_number": 3,
+      "agent_id": "retailer",
+      "kind": "offer",
+      "message": "Thanks for clarifying your position at $2.88. We are still interested in closing quickly, but we also need to stay disciplined on our retail margin and landed cost, so I can move up modestly to $2.85 per unit. That narrows the gap meaningfully from our last offer and keeps us in a range where we can support volume; if you can meet us at $2.85, we should be able to finalize this now. The seller's $2.88 offer is within our ceiling of $2.94, so acceptance is possible, but there is still room to improve the buy price while preserving value for the retailer. Moving from $2.83 to $2.85 is a credible concession that signals seriousness without giving up unnecessary margin this early.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.85,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.88,
+        "note": "I appreciate the movement to $2.83 and agree we are in a workable range, but $2.83 is below the level we can responsibly commit to on our side. Given our production economics and the need to keep the program sustainable at volume, we can hold at $2.88 per unit as our best price. That keeps us within the market range, reflects a fair midpoint given the value and reliability we are providing, and leaves room to close this quickly if you are ready. The buyer's offer of $2.83 is above our floor of $2.66, so agreement is possible, but accepting it would concede more margin than necessary with turns remaining. Reaffirming $2.88 preserves downstream margin better than accepting the buyer's price while still staying within the buyer's ceiling of $2.94.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T13:05:05.552425Z",
+      "tool_calls": [
+        {
+          "id": "tool-0c4af8b6",
+          "step_index": 14,
+          "agent_id": "retailer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "round_number": 3
+          },
+          "result_summary": "Reviewed state for manufacturer_retailer round 3. Pending message: {'type': 'offer', 'price': 2.88, 'note': \"I appreciate the movement to $2.83 and agree we are in a workable range, but $2.83 is below the level we can responsibly commit to on our side. Given our production economics and the need to keep the program sustainable at volume, we can hold at $2.88 per unit as our best price. That keeps us within the market range, reflects a fair midpoint given the value and reliability we are providing, and leaves room to close this quickly if you are ready. The buyer's offer of $2.83 is above our floor of $2.66, so agreement is possible, but accepting it would concede more margin than necessary with turns remaining. Reaffirming $2.88 preserves downstream margin better than accepting the buyer's price while still staying within the buyer's ceiling of $2.94.\", 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T13:05:01.455718Z"
+        },
+        {
+          "id": "tool-07dad248",
+          "step_index": 14,
+          "agent_id": "retailer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 1.18
+          },
+          "result_summary": "Observed market reference price: 1.18.",
+          "created_at": "2026-04-10T13:05:01.455755Z"
+        }
+      ]
+    },
+    {
+      "index": 15,
+      "phase": "manufacturer_retailer",
+      "negotiation_id": "neg-df8687e8",
+      "round_number": 4,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I appreciate the movement to $2.85 and your focus on getting this wrapped up quickly. We are already very close, and I can make a final concession to $2.87 per unit to help close the gap while still protecting our production economics and quality commitments. If you can meet us at $2.87, we should be able to finalize the agreement promptly this round. The buyer's $2.85 offer is above our minimum acceptable price of $2.66, so there is no need to reject, but accepting now would leave value on the table with only a small gap remaining. A modest counter at $2.87 keeps us within the buyer's stated ceiling of $2.94, signals seriousness near the end of the negotiation, and improves seller margin while preserving a strong chance of immediate agreement.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.87,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.85,
+        "note": "Thanks for clarifying your position at $2.88. We are still interested in closing quickly, but we also need to stay disciplined on our retail margin and landed cost, so I can move up modestly to $2.85 per unit. That narrows the gap meaningfully from our last offer and keeps us in a range where we can support volume; if you can meet us at $2.85, we should be able to finalize this now. The seller's $2.88 offer is within our ceiling of $2.94, so acceptance is possible, but there is still room to improve the buy price while preserving value for the retailer. Moving from $2.83 to $2.85 is a credible concession that signals seriousness without giving up unnecessary margin this early.",
+        "from_agent_id": "retailer"
+      },
+      "created_at": "2026-04-10T13:05:10.363968Z",
+      "tool_calls": [
+        {
+          "id": "tool-ad852e46",
+          "step_index": 15,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "round_number": 4
+          },
+          "result_summary": "Reviewed state for manufacturer_retailer round 4. Pending message: {'type': 'offer', 'price': 2.85, 'note': \"Thanks for clarifying your position at $2.88. We are still interested in closing quickly, but we also need to stay disciplined on our retail margin and landed cost, so I can move up modestly to $2.85 per unit. That narrows the gap meaningfully from our last offer and keeps us in a range where we can support volume; if you can meet us at $2.85, we should be able to finalize this now. The seller's $2.88 offer is within our ceiling of $2.94, so acceptance is possible, but there is still room to improve the buy price while preserving value for the retailer. Moving from $2.83 to $2.85 is a credible concession that signals seriousness without giving up unnecessary margin this early.\", 'from_agent_id': 'retailer'}.",
+          "created_at": "2026-04-10T13:05:05.555074Z"
+        },
+        {
+          "id": "tool-587ba591",
+          "step_index": 15,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 4.83
+          },
+          "result_summary": "Observed market reference price: 4.83.",
+          "created_at": "2026-04-10T13:05:05.555091Z"
+        }
+      ]
+    },
+    {
+      "index": 16,
+      "phase": "manufacturer_retailer",
+      "negotiation_id": "neg-df8687e8",
+      "round_number": 4,
+      "agent_id": "retailer",
+      "kind": "accept",
+      "message": "Thanks for the movement to $2.87 per unit. That price is within our buying limit and the gap from our last offer is small enough that we\u2019re prepared to finalize now so we can keep the process moving and secure the units this round. Accepting at $2.87 stays below our maximum buy price of $2.94 and closes the deal efficiently with only a $0.02 concession from our prior offer. With limited rounds remaining, it makes sense to lock in supply rather than risk the agreement over a narrow difference.",
+      "outcome": "Negotiation ends with an accepted deal.",
+      "proposed_price": 2.87,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.87,
+        "note": "I appreciate the movement to $2.85 and your focus on getting this wrapped up quickly. We are already very close, and I can make a final concession to $2.87 per unit to help close the gap while still protecting our production economics and quality commitments. If you can meet us at $2.87, we should be able to finalize the agreement promptly this round. The buyer's $2.85 offer is above our minimum acceptable price of $2.66, so there is no need to reject, but accepting now would leave value on the table with only a small gap remaining. A modest counter at $2.87 keeps us within the buyer's stated ceiling of $2.94, signals seriousness near the end of the negotiation, and improves seller margin while preserving a strong chance of immediate agreement.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T13:05:13.949059Z",
+      "tool_calls": [
+        {
+          "id": "tool-6f0ddd1b",
+          "step_index": 16,
+          "agent_id": "retailer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "round_number": 4
+          },
+          "result_summary": "Reviewed state for manufacturer_retailer round 4. Pending message: {'type': 'offer', 'price': 2.87, 'note': \"I appreciate the movement to $2.85 and your focus on getting this wrapped up quickly. We are already very close, and I can make a final concession to $2.87 per unit to help close the gap while still protecting our production economics and quality commitments. If you can meet us at $2.87, we should be able to finalize the agreement promptly this round. The buyer's $2.85 offer is above our minimum acceptable price of $2.66, so there is no need to reject, but accepting now would leave value on the table with only a small gap remaining. A modest counter at $2.87 keeps us within the buyer's stated ceiling of $2.94, signals seriousness near the end of the negotiation, and improves seller margin while preserving a strong chance of immediate agreement.\", 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T13:05:10.371051Z"
+        },
+        {
+          "id": "tool-730fb64f",
+          "step_index": 16,
+          "agent_id": "retailer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-df8687e8",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 1.57
+          },
+          "result_summary": "Observed market reference price: 1.57.",
+          "created_at": "2026-04-10T13:05:10.371088Z"
+        }
+      ]
+    }
+  ],
+  "negotiations": [
+    {
+      "id": "neg-1fb284eb",
+      "phase": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "seller_agent_id": "supplier",
+      "buyer_agent_id": "manufacturer",
+      "status": "accepted",
+      "max_rounds": 5,
+      "quantity": 2341,
+      "rounds_completed": 4,
+      "opening_seller_offer": 2.34,
+      "opening_buyer_offer": 2.18,
+      "final_price": 2.25,
+      "outcome_summary": "Supplier to Manufacturer accepted at 2.25.",
+      "dependency_note": "Initial upstream procurement negotiation."
+    },
+    {
+      "id": "neg-df8687e8",
+      "phase": "manufacturer_retailer",
+      "label": "Manufacturer to Retailer",
+      "seller_agent_id": "manufacturer",
+      "buyer_agent_id": "retailer",
+      "status": "accepted",
+      "max_rounds": 5,
+      "quantity": 2341,
+      "rounds_completed": 4,
+      "opening_seller_offer": 2.92,
+      "opening_buyer_offer": 2.79,
+      "final_price": 2.87,
+      "outcome_summary": "Manufacturer to Retailer accepted at 2.87.",
+      "dependency_note": "Manufacturer sell floor uses the accepted upstream deal as its cost basis."
+    }
+  ],
+  "diagnosis": {
+    "outcome": "Upstream deal accepted at 2.25 USD. Downstream deal accepted at 2.87 USD.",
+    "chain_effect": "The manufacturer carried a cost basis of 2.25 USD, which forced a downstream sell floor of 2.66 USD.",
+    "key_risks": [
+      "A costly upstream agreement compresses downstream negotiating room.",
+      "Turn limits can force timeouts even when the gap is narrowing."
+    ],
+    "key_signals": [
+      "Supplier-manufacturer status: accepted.",
+      "Manufacturer-retailer status: accepted."
+    ],
+    "suggested_next_actions": [
+      "Tune reservation prices and turn limits to test sensitivity.",
+      "Add richer quantity or margin tradeoffs before introducing LLM behavior."
+    ]
+  },
+  "max_rounds_per_negotiation": 5,
+  "notes": "Backend simulation with linked upstream and downstream negotiations.",
+  "tags": [
+    "simulation",
+    "supply-chain"
+  ]
+}

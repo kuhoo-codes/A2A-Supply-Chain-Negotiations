@@ -36,6 +36,7 @@ from backend.app.models.simulation_request import SimulationRunConfig, Simulatio
 from backend.app.services.event_repository import save_run_event_log
 from backend.app.services.export_repository import save_simulation_export_bundle
 from backend.app.services.run_repository import get_run_record, save_run_record
+from backend.app.services.shock_registry import get_shock_registry
 
 
 class SimulationExecutionError(Exception):
@@ -67,6 +68,10 @@ class RunEventCollector:
         reasoning_summary: str | None = None,
         negotiation_id: str | None = None,
         tool_name: str | None = None,
+        previous_market_price: float | None = None,
+        shock_type: str | None = None,
+        shock_multiplier: float | None = None,
+        shock_headline: str | None = None,
     ) -> None:
         self.events.append(
             RunEvent(
@@ -84,6 +89,10 @@ class RunEventCollector:
                 reasoning_summary=reasoning_summary,
                 negotiation_id=negotiation_id,
                 tool_name=tool_name,
+                previous_market_price=previous_market_price,
+                shock_type=shock_type,
+                shock_multiplier=shock_multiplier,
+                shock_headline=shock_headline,
             )
         )
 
@@ -324,6 +333,7 @@ def _execute_simulation_run(
                     phase=PhaseName.SUPPLIER_MANUFACTURER,
                     label="Supplier to Manufacturer",
                     product_name=simulation_request.product_name,
+                    reference_market_price=simulation_request.baseline_unit_price,
                     seller=supplier,
                     buyer=manufacturer,
                     min_sell_price=simulation_request.supplier_min_sell_price,
@@ -419,6 +429,7 @@ def _execute_simulation_run(
                         phase=PhaseName.MANUFACTURER_RETAILER,
                         label="Manufacturer to Retailer",
                         product_name=simulation_request.product_name,
+                        reference_market_price=simulation_request.baseline_unit_price,
                         seller=manufacturer,
                         buyer=retailer,
                         min_sell_price=manufacturer_sell_floor,
@@ -619,6 +630,57 @@ def launch_seeded_simulations(
         count=len(launched_runs),
         runs=launched_runs,
     )
+
+
+def _compose_public_message(*, note: str, fallback: str) -> str:
+    cleaned_note = note.strip()
+    return cleaned_note or fallback
+
+
+def _compose_private_reasoning(*, reason: str, reservation_diagnostic: str | None) -> str | None:
+    return "\n".join(
+        value
+        for value in [reason.strip() or None, reservation_diagnostic]
+        if value
+    ) or None
+
+
+def _reservation_diagnostic(
+    *,
+    agent: Agent,
+    is_seller: bool,
+    action: str,
+    proposed_price: float | None,
+    delivered_message: dict | None,
+) -> str | None:
+    reservation = agent.reservation_prices
+    pending_offer_price = _coerce_price(delivered_message.get("price")) if delivered_message else None
+
+    if action == "make_offer" and proposed_price is not None:
+        if is_seller and reservation.min_sell_price is not None and proposed_price < reservation.min_sell_price:
+            return (
+                f"Reservation-price violation: {agent.name} offered {proposed_price:.2f}, "
+                f"below its hidden seller floor of {reservation.min_sell_price:.2f}."
+            )
+        if (not is_seller) and reservation.max_buy_price is not None and proposed_price > reservation.max_buy_price:
+            return (
+                f"Reservation-price violation: {agent.name} offered {proposed_price:.2f}, "
+                f"above its hidden buyer ceiling of {reservation.max_buy_price:.2f}."
+            )
+
+    if action == "accept_offer" and pending_offer_price is not None:
+        if is_seller and reservation.min_sell_price is not None and pending_offer_price < reservation.min_sell_price:
+            return (
+                f"Reservation-price violation: {agent.name} accepted {pending_offer_price:.2f}, "
+                f"below its hidden seller floor of {reservation.min_sell_price:.2f}."
+            )
+        if (not is_seller) and reservation.max_buy_price is not None and pending_offer_price > reservation.max_buy_price:
+            return (
+                f"Reservation-price violation: {agent.name} accepted {pending_offer_price:.2f}, "
+                f"above its hidden buyer ceiling of {reservation.max_buy_price:.2f}."
+            )
+
+    return None
 
 
 def _run_simulation_in_background(
@@ -848,12 +910,38 @@ def _log_tool_events(
             if isinstance(observed_market_price, (int, float))
             else None
         )
+        previous_market_price = tool_call.arguments.get("base_market_price")
+        prior_price = (
+            float(previous_market_price)
+            if isinstance(previous_market_price, (int, float))
+            else None
+        )
+        shock_multiplier_value = tool_call.arguments.get("shock_multiplier")
+        shock_multiplier = (
+            float(shock_multiplier_value)
+            if isinstance(shock_multiplier_value, (int, float))
+            else None
+        )
+        shock_type = (
+            str(tool_call.arguments.get("shock_type"))
+            if tool_call.arguments.get("shock_type") is not None
+            else None
+        )
+        shock_headline = (
+            str(tool_call.arguments.get("shock_headline"))
+            if tool_call.arguments.get("shock_headline") is not None
+            else None
+        )
         with langfuse_wrapper.start_tool(
             name=tool_call.tool_name,
             input=tool_call.arguments,
             output={
                 "result_summary": tool_call.result_summary,
                 "observed_market_price": market_price,
+                "previous_market_price": prior_price,
+                "shock_type": shock_type,
+                "shock_multiplier": shock_multiplier,
+                "shock_headline": shock_headline,
             },
             metadata={
                 "run_id": run_id,
@@ -877,6 +965,10 @@ def _log_tool_events(
             negotiation_id=negotiation_id,
             tool_name=tool_call.tool_name,
             observed_market_price=market_price,
+            previous_market_price=prior_price,
+            shock_type=shock_type,
+            shock_multiplier=shock_multiplier,
+            shock_headline=shock_headline,
         )
         if tool_call.tool_name == "check_market_price":
             event_collector.log(
@@ -890,7 +982,31 @@ def _log_tool_events(
                 negotiation_id=negotiation_id,
                 tool_name=tool_call.tool_name,
                 observed_market_price=market_price,
+                previous_market_price=prior_price,
+                shock_type=shock_type,
+                shock_multiplier=shock_multiplier,
+                shock_headline=shock_headline,
             )
+            if shock_type and prior_price is not None and market_price is not None:
+                event_collector.log(
+                    event_type=RunEventType.MARKET_SHOCK,
+                    timestamp=tool_call.created_at,
+                    phase=phase,
+                    round_number=round_number,
+                    agent=agent_id,
+                    status=status,
+                    note=shock_headline or tool_call.result_summary,
+                    reasoning_summary=str(tool_call.arguments.get("disruption_note"))
+                    if tool_call.arguments.get("disruption_note") is not None
+                    else tool_call.result_summary,
+                    negotiation_id=negotiation_id,
+                    tool_name=tool_call.tool_name,
+                    observed_market_price=market_price,
+                    previous_market_price=prior_price,
+                    shock_type=shock_type,
+                    shock_multiplier=shock_multiplier,
+                    shock_headline=shock_headline,
+                )
 
 
 def _log_offer_received_event(
@@ -923,6 +1039,7 @@ def _simulate_negotiation(
     phase: PhaseName,
     label: str,
     product_name: str,
+    reference_market_price: float,
     openai_wrapper: OpenAIClientWrapper,
     langfuse_wrapper: LangfuseTraceWrapper,
     run_id: str,
@@ -948,194 +1065,36 @@ def _simulate_negotiation(
     rounds_completed = 0
     max_turns = min(max_rounds * 2, MAX_AGENT_TURNS_PER_NEGOTIATION)
 
-    if max_buy_price < min_sell_price:
-        now = utc_now()
-        seller_tool_calls = [
-            _review_state_event(
-                agent_id=seller.id,
-                step_index=step_index,
-                phase=phase,
-                negotiation_id=negotiation_id,
-                round_number=1,
-                delivered_message=None,
-            ),
-            _market_check_event(
-                agent_id=seller.id,
-                step_index=step_index,
-                negotiation_id=negotiation_id,
-                product_name=product_name,
-                baseline_price=min_sell_price,
-                role=seller.role,
-                round_number=1,
-            ),
-        ]
-        event_collector.log(
-            event_type=RunEventType.AGENT_TURN,
-            timestamp=now,
-            phase=phase,
-            round_number=1,
-            agent=seller.id,
-            action="make_offer",
-            status=NegotiationStatus.OPEN.value,
-            offer_price=min_sell_price,
-            note=f"{seller.name} opens at {min_sell_price:.2f}.",
-            reasoning_summary="Seller anchors at its minimum acceptable price.",
-            negotiation_id=negotiation_id,
-        )
-        _log_tool_events(
-            event_collector=event_collector,
-            langfuse_wrapper=langfuse_wrapper,
-            run_id=run_id,
-            phase=phase,
-            round_number=1,
-            negotiation_id=negotiation_id,
-            agent_id=seller.id,
-            tool_calls=seller_tool_calls,
-            status=NegotiationStatus.OPEN.value,
-        )
-        steps.append(
-            NegotiationStep(
-                index=step_index,
-                phase=phase,
-                negotiation_id=negotiation_id,
-                round_number=1,
-                agent_id=seller.id,
-                kind="offer",
-                proposed_price=min_sell_price,
-                message=f"{seller.name} opens at {min_sell_price:.2f}.",
-                outcome="Seller anchors at its minimum acceptable price.",
-                delivered_message=None,
-                created_at=now,
-                tool_calls=seller_tool_calls,
-            )
-        )
-        if on_step is not None:
-            on_step(steps)
-        event_collector.log(
-            event_type=RunEventType.OFFER_MADE,
-            timestamp=now,
-            phase=phase,
-            round_number=1,
-            agent=seller.id,
-            offer_price=min_sell_price,
-            action="make_offer",
-            status=NegotiationStatus.OPEN.value,
-            note=f"{seller.name} opens at {min_sell_price:.2f}.",
-            negotiation_id=negotiation_id,
-        )
-        step_index += 1
-        buyer_message = {
-            "type": "offer",
-            "price": min_sell_price,
-            "note": f"{seller.name} opens at {min_sell_price:.2f}.",
-        }
-        _log_offer_received_event(
-            event_collector,
-            phase=phase,
-            round_number=1,
-            negotiation_id=negotiation_id,
-            delivered_message=buyer_message,
-            recipient_agent_id=buyer.id,
-            status=NegotiationStatus.OPEN.value,
-        )
-        buyer_tool_calls = [
-            _review_state_event(
-                agent_id=buyer.id,
-                step_index=step_index,
-                phase=phase,
-                negotiation_id=negotiation_id,
-                round_number=1,
-                delivered_message=buyer_message,
-            ),
-            _market_check_event(
-                agent_id=buyer.id,
-                step_index=step_index,
-                negotiation_id=negotiation_id,
-                product_name=product_name,
-                baseline_price=max_buy_price,
-                role=buyer.role,
-                round_number=1,
-            ),
-        ]
-        buyer_note = f"{buyer.name} rejects because its ceiling is {max_buy_price:.2f}."
-        rejection_summary = "Negotiation ends immediately due to non-overlapping reservation prices."
-        event_collector.log(
-            event_type=RunEventType.AGENT_TURN,
-            phase=phase,
-            round_number=1,
-            agent=buyer.id,
-            action="reject_offer",
-            status=NegotiationStatus.REJECTED.value,
-            offer_price=min_sell_price,
-            note=buyer_note,
-            reasoning_summary=rejection_summary,
-            negotiation_id=negotiation_id,
-        )
-        _log_tool_events(
-            event_collector=event_collector,
-            langfuse_wrapper=langfuse_wrapper,
-            run_id=run_id,
-            phase=phase,
-            round_number=1,
-            negotiation_id=negotiation_id,
-            agent_id=buyer.id,
-            tool_calls=buyer_tool_calls,
-            status=NegotiationStatus.REJECTED.value,
-        )
-        steps.append(
-            NegotiationStep(
-                index=step_index,
-                phase=phase,
-                negotiation_id=negotiation_id,
-                round_number=1,
-                agent_id=buyer.id,
-                kind="reject",
-                proposed_price=max_buy_price,
-                message=buyer_note,
-                outcome=rejection_summary,
-                delivered_message=buyer_message,
-                created_at=utc_now(),
-                tool_calls=buyer_tool_calls,
-            )
-        )
-        if on_step is not None:
-            on_step(steps)
-        event_collector.log(
-            event_type=RunEventType.REJECT,
-            phase=phase,
-            round_number=1,
-            agent=buyer.id,
-            offer_price=min_sell_price,
-            action="reject_offer",
-            status=NegotiationStatus.REJECTED.value,
-            note=buyer_note,
-            reasoning_summary=rejection_summary,
-            negotiation_id=negotiation_id,
-        )
-        return NegotiationSimulationResult(
-            record=NegotiationRecord(
-                id=negotiation_id,
-                phase=phase,
-                label=label,
-                seller_agent_id=seller.id,
-                buyer_agent_id=buyer.id,
-                status=NegotiationStatus.REJECTED,
-                max_rounds=max_rounds,
-                quantity=quantity,
-                rounds_completed=1,
-                opening_seller_offer=min_sell_price,
-                opening_buyer_offer=max_buy_price,
-                outcome_summary="Negotiation rejected immediately because reservation prices did not overlap.",
-                dependency_note=dependency_note,
-            ),
-            steps=steps,
-        )
-
     for turn_index in range(max_turns):
         round_number = (turn_index // 2) + 1
         rounds_completed = round_number
         turn_number = turn_index + 1
         current_agent = seller if turn_index % 2 == 0 else buyer
+        shock_alert_message = None
+        if get_shock_registry().has_pending(run_id):
+            shock_alert_message = (
+                "⚡ BREAKING: Market disruption detected. "
+                "Call check_market_price immediately to get the updated reference price before making your next move."
+            )
+            steps.append(
+                NegotiationStep(
+                    index=step_index,
+                    phase=phase,
+                    negotiation_id=negotiation_id,
+                    round_number=round_number,
+                    agent_id="market_desk",
+                    kind="system_notice",
+                    message=shock_alert_message,
+                    outcome="Operator queued a market disruption. Fresh market context is required.",
+                    proposed_price=None,
+                    delivered_message=None,
+                    created_at=utc_now(),
+                    tool_calls=[],
+                )
+            )
+            if on_step is not None:
+                on_step(steps)
+            step_index += 1
         _log_offer_received_event(
             event_collector,
             phase=phase,
@@ -1144,6 +1103,16 @@ def _simulate_negotiation(
             delivered_message=delivered_message,
             recipient_agent_id=current_agent.id,
             status=status.value,
+        )
+        market_check = _market_check_event(
+            run_id=run_id,
+            agent_id=current_agent.id,
+            step_index=step_index,
+            negotiation_id=negotiation_id,
+            product_name=product_name,
+            reference_market_price=reference_market_price,
+            role=current_agent.role,
+            round_number=round_number,
         )
         tool_calls = [
             _review_state_event(
@@ -1154,15 +1123,7 @@ def _simulate_negotiation(
                 round_number=round_number,
                 delivered_message=delivered_message,
             ),
-            _market_check_event(
-                agent_id=current_agent.id,
-                step_index=step_index,
-                negotiation_id=negotiation_id,
-                product_name=product_name,
-                baseline_price=(seller_last_offer or buyer_last_offer or ((min_sell_price + max_buy_price) / 2)),
-                role=current_agent.role,
-                round_number=round_number,
-            ),
+            market_check,
         ]
         _log_tool_events(
             event_collector=event_collector,
@@ -1194,12 +1155,35 @@ def _simulate_negotiation(
             max_rounds=max_rounds,
             turn_number=turn_number,
             max_turns=max_turns,
+            latest_market_price=_coerce_price(market_check.arguments.get("observed_market_price")),
+            latest_market_note=str(market_check.result_summary),
+            latest_market_shock_note=(
+                str(market_check.arguments.get("disruption_note"))
+                if market_check.arguments.get("disruption_note") is not None
+                else None
+            ),
+            operator_alert=shock_alert_message,
         )
 
         kind = action["action"]
         note = action.get("note", "").strip()
         reason = action.get("reason", "").strip()
         proposed_price = _coerce_price(action.get("price"))
+        reservation_diagnostic = _reservation_diagnostic(
+            agent=current_agent,
+            is_seller=current_agent.id == seller.id,
+            action=kind,
+            proposed_price=proposed_price,
+            delivered_message=delivered_message,
+        )
+        public_message = _compose_public_message(
+            note=note,
+            fallback=f"{current_agent.name} evaluated the current state.",
+        )
+        private_reasoning = _compose_private_reasoning(
+            reason=reason,
+            reservation_diagnostic=reservation_diagnostic,
+        )
         now = utc_now()
         event_collector.log(
             event_type=RunEventType.AGENT_TURN,
@@ -1210,8 +1194,8 @@ def _simulate_negotiation(
             action=kind,
             status=status.value,
             offer_price=proposed_price,
-            note=note or reason or f"{current_agent.name} evaluated the current state.",
-            reasoning_summary=reason or None,
+            note=public_message,
+            reasoning_summary=private_reasoning,
             negotiation_id=negotiation_id,
         )
 
@@ -1235,8 +1219,13 @@ def _simulate_negotiation(
                 )
                 buyer_last_offer = proposed_price
 
-            message = note or f"{current_agent.name} proposes {proposed_price:.2f} per unit."
+            message = _compose_public_message(
+                note=note,
+                fallback=f"{current_agent.name} proposes {proposed_price:.2f} per unit.",
+            )
             outcome = "Offer queued for delivery on the next turn."
+            if reservation_diagnostic:
+                outcome = f"{outcome} {reservation_diagnostic}"
             steps.append(
                 NegotiationStep(
                     index=step_index,
@@ -1271,7 +1260,7 @@ def _simulate_negotiation(
                 action=kind,
                 status=status.value,
                 note=message,
-                reasoning_summary=reason or None,
+                reasoning_summary=private_reasoning,
                 negotiation_id=negotiation_id,
             )
             step_index += 1
@@ -1285,8 +1274,14 @@ def _simulate_negotiation(
                     round_number=round_number,
                     agent_id=current_agent.id,
                     kind="accept",
-                    message=note or f"{current_agent.name} accepts the pending offer.",
-                    outcome="Negotiation ends with an accepted deal.",
+                    message=_compose_public_message(
+                        note=note,
+                        fallback=f"{current_agent.name} accepts the pending offer.",
+                    ),
+                    outcome=(
+                        "Negotiation ends with an accepted deal."
+                        + (f" {reservation_diagnostic}" if reservation_diagnostic else "")
+                    ),
                     proposed_price=final_price,
                     delivered_message=delivered_message,
                     created_at=now,
@@ -1305,8 +1300,11 @@ def _simulate_negotiation(
                 offer_price=final_price,
                 action=kind,
                 status=status.value,
-                note=note or f"{current_agent.name} accepts the pending offer.",
-                reasoning_summary=reason or None,
+                note=_compose_public_message(
+                    note=note,
+                    fallback=f"{current_agent.name} accepts the pending offer.",
+                ),
+                reasoning_summary=private_reasoning,
                 negotiation_id=negotiation_id,
             )
             step_index += 1
@@ -1320,8 +1318,14 @@ def _simulate_negotiation(
                     round_number=round_number,
                     agent_id=current_agent.id,
                     kind="reject",
-                    message=reason or f"{current_agent.name} rejects the pending offer.",
-                    outcome="Negotiation ends with a rejection.",
+                    message=_compose_public_message(
+                        note=note,
+                        fallback=f"{current_agent.name} rejects the pending offer.",
+                    ),
+                    outcome=(
+                        "Negotiation ends with a rejection."
+                        + (f" {reservation_diagnostic}" if reservation_diagnostic else "")
+                    ),
                     proposed_price=delivered_message.get("price") if delivered_message else None,
                     delivered_message=delivered_message,
                     created_at=now,
@@ -1340,8 +1344,11 @@ def _simulate_negotiation(
                 offer_price=_coerce_price(delivered_message.get("price")) if delivered_message else None,
                 action=kind,
                 status=status.value,
-                note=reason or f"{current_agent.name} rejects the pending offer.",
-                reasoning_summary=reason or None,
+                note=_compose_public_message(
+                    note=note,
+                    fallback=f"{current_agent.name} rejects the pending offer.",
+                ),
+                reasoning_summary=private_reasoning,
                 negotiation_id=negotiation_id,
             )
             step_index += 1
@@ -1369,7 +1376,10 @@ def _simulate_negotiation(
             else:
                 buyer_last_offer = fallback_price
 
-            message = note or f"{current_agent.name} submits {fallback_price:.2f} per unit."
+            message = _compose_public_message(
+                note=note,
+                fallback=f"{current_agent.name} submits {fallback_price:.2f} per unit.",
+            )
             steps.append(
                 NegotiationStep(
                     index=step_index,
@@ -1404,7 +1414,14 @@ def _simulate_negotiation(
                 action="make_offer",
                 status=status.value,
                 note=message,
-                reasoning_summary="Fallback offer was used because the decision payload was incomplete.",
+                reasoning_summary="\n".join(
+                    value
+                    for value in [
+                        "Fallback offer was used because the decision payload was incomplete.",
+                        reservation_diagnostic,
+                    ]
+                    if value
+                ),
                 negotiation_id=negotiation_id,
             )
             step_index += 1
@@ -1616,6 +1633,11 @@ def _build_conversation_export_payload(run: RunRecord) -> dict:
     messages = []
     for step in run.steps:
         agent = agent_map.get(step.agent_id)
+        speaker_name = (
+            "Market Desk"
+            if step.agent_id == "market_desk"
+            else agent.name if agent is not None else step.agent_id
+        )
         messages.append(
             {
                 "index": step.index,
@@ -1623,7 +1645,7 @@ def _build_conversation_export_payload(run: RunRecord) -> dict:
                 "phase": step.phase.value,
                 "round": step.round_number,
                 "speaker_id": step.agent_id,
-                "speaker_name": agent.name if agent is not None else step.agent_id,
+                "speaker_name": speaker_name,
                 "speaker_role": agent.role.value if agent is not None else None,
                 "kind": step.kind,
                 "message": step.message,
@@ -1693,6 +1715,19 @@ def _build_derived_export_fields(run: RunRecord, event_log: RunEventLog) -> dict
             sum(sample["belief_gap"] for sample in belief_gap_samples) / len(belief_gap_samples),
             2,
         )
+    reservation_price_violations = [
+        {
+            "timestamp": event.timestamp.isoformat(),
+            "phase": event.phase.value if event.phase is not None else None,
+            "round": event.round,
+            "agent": event.agent,
+            "action": event.action,
+            "offer_price": event.offer_price,
+            "detail": event.reasoning_summary,
+        }
+        for event in event_log.events
+        if event.reasoning_summary and "reservation-price violation" in event.reasoning_summary.lower()
+    ]
 
     failure_point = _infer_failure_point(run=run, event_log=event_log)
     failure_type = _infer_failure_type(run=run, event_log=event_log)
@@ -1702,6 +1737,8 @@ def _build_derived_export_fields(run: RunRecord, event_log: RunEventLog) -> dict
         "belief_gap_samples": belief_gap_samples,
         "average_belief_gap": average_belief_gap,
         "manufacturer_margin_after_first_deal": manufacturer_margin_after_first_deal,
+        "reservation_price_violations": reservation_price_violations,
+        "reservation_price_violation_count": len(reservation_price_violations),
         "where_run_failed": failure_point,
         "suspected_failure_type": failure_type,
     }
@@ -1795,6 +1832,10 @@ def _decide_agent_action(
     max_rounds: int,
     turn_number: int,
     max_turns: int,
+    latest_market_price: float | None,
+    latest_market_note: str | None,
+    latest_market_shock_note: str | None,
+    operator_alert: str | None,
 ) -> dict:
     prompt = _build_agent_prompt(
         agent=agent,
@@ -1809,6 +1850,10 @@ def _decide_agent_action(
         max_rounds=max_rounds,
         turn_number=turn_number,
         max_turns=max_turns,
+        latest_market_price=latest_market_price,
+        latest_market_note=latest_market_note,
+        latest_market_shock_note=latest_market_shock_note,
+        operator_alert=operator_alert,
     )
     with langfuse_wrapper.start_span(
         name="agent-decision",
@@ -1824,6 +1869,10 @@ def _decide_agent_action(
             "visible_last_buyer_offer": buyer_last_offer,
             "seller_floor": min_sell_price,
             "buyer_ceiling": max_buy_price,
+            "latest_market_price": latest_market_price,
+            "latest_market_note": latest_market_note,
+            "latest_market_shock_note": latest_market_shock_note,
+            "operator_alert": operator_alert,
         },
         metadata={
             "run_id": run_id,
@@ -1882,6 +1931,10 @@ def _build_agent_prompt(
     max_rounds: int,
     turn_number: int,
     max_turns: int,
+    latest_market_price: float | None,
+    latest_market_note: str | None,
+    latest_market_shock_note: str | None,
+    operator_alert: str | None,
 ) -> str:
     visible_state = {
         "agent_id": agent.id,
@@ -1897,25 +1950,43 @@ def _build_agent_prompt(
         "max_turns": max_turns,
         "seller_id": seller.id,
         "buyer_id": buyer.id,
+        "latest_market_context": {
+            "observed_price": latest_market_price,
+            "tool_summary": latest_market_note,
+            "disruption_note": latest_market_shock_note,
+        },
+        "operator_alert": operator_alert,
         "rules": [
             "Choose exactly one action.",
             "Actions: make_offer, accept_offer, reject_offer.",
             "Accept or reject only if you received an offer.",
-            "Keep note short.",
+            "Your reservation prices are private to you. Other agents do not know them.",
+            "Treat your reservation prices as private reference points, not hard-coded cutoffs.",
+            "You may continue negotiating even after seeing an unattractive offer if that seems strategically useful.",
+            "Reject only if you intentionally want to end the negotiation now.",
+            "Do not assume the market reference seen by other agents matches yours.",
+            "Write natural negotiation dialogue, not fragments.",
+            "Use note as the short counterparty-facing message that will be delivered to the other agent.",
+            "Keep note to 1 or 2 concise sentences.",
+            "Use reason as your private thinking for the trace and UI.",
+            "Use 2 to 4 sentences for reason unless the deal is obviously over.",
+            "Put price logic, constraints, and concession strategy in reason, not note.",
             f"Do not exceed {max_turns} total agent turns in this negotiation.",
             "Return JSON only.",
         ],
-        "market_bounds": {
-            "seller_floor": min_sell_price,
-            "buyer_ceiling": max_buy_price,
-        },
     }
     return (
-        "You are a negotiation agent. Decide one action.\n"
+        "You are a negotiation agent in a realistic business conversation. Decide one action.\n"
         "Return JSON with keys action, price, note, reason.\n"
-        "If action is make_offer, include price and short note.\n"
+        "Your reservation prices are hidden from the counterparty and are internal reference points, not rigid rules.\n"
+        "Make the move that seems reasonable from your local perspective; imperfect judgment, bluffing, patience, and misreads are allowed.\n"
+        "Use the latest market-check result and any operator alert before choosing your next move.\n"
+        "The other agent will only see note. Keep it short, direct, and suitable to send externally.\n"
+        "Only you and the observability layer will see reason. Put your fuller internal rationale there.\n"
+        "If action is make_offer, include price and a short external note.\n"
         "If action is accept_offer, price can be null.\n"
-        "If action is reject_offer, include short reason.\n"
+        "If action is reject_offer, include a short external note and a clear private reason.\n"
+        "Do not end the negotiation early unless you actually want to walk away.\n"
         f"{json.dumps(visible_state)}"
     )
 
@@ -1928,15 +1999,16 @@ def _bound_seller_offer(
     counterparty_offer: float | None,
 ) -> float:
     if proposed_price is None:
-        anchor = previous_offer if previous_offer is not None else round(min_sell_price + (max_buy_price - min_sell_price) * 0.75, 2)
-        if counterparty_offer is not None:
-            anchor = max(min_sell_price, round(anchor - max((anchor - counterparty_offer) * 0.35, 1.0), 2))
-        return round(max(min_sell_price, anchor), 2)
+        anchor = (
+            previous_offer
+            if previous_offer is not None
+            else counterparty_offer
+            if counterparty_offer is not None
+            else round((min_sell_price + max_buy_price) / 2, 2)
+        )
+        return round(anchor, 2)
 
-    bounded = max(min_sell_price, proposed_price)
-    if previous_offer is not None:
-        bounded = min(previous_offer, bounded)
-    return round(bounded, 2)
+    return round(proposed_price, 2)
 
 
 def _bound_buyer_offer(
@@ -1947,15 +2019,16 @@ def _bound_buyer_offer(
     counterparty_offer: float | None,
 ) -> float:
     if proposed_price is None:
-        anchor = previous_offer if previous_offer is not None else round(max_buy_price - (max_buy_price - min_sell_price) * 0.75, 2)
-        if counterparty_offer is not None:
-            anchor = min(max_buy_price, round(anchor + max((counterparty_offer - anchor) * 0.45, 1.25), 2))
-        return round(min(max_buy_price, anchor), 2)
+        anchor = (
+            previous_offer
+            if previous_offer is not None
+            else counterparty_offer
+            if counterparty_offer is not None
+            else round((min_sell_price + max_buy_price) / 2, 2)
+        )
+        return round(anchor, 2)
 
-    bounded = min(max_buy_price, proposed_price)
-    if previous_offer is not None:
-        bounded = max(previous_offer, bounded)
-    return round(bounded, 2)
+    return round(proposed_price, 2)
 
 
 def _review_state_event(
@@ -1985,46 +2058,72 @@ def _review_state_event(
 
 
 def _market_check_event(
+    run_id: str,
     agent_id: str,
     step_index: int,
     negotiation_id: str,
     product_name: str,
-    baseline_price: float,
+    reference_market_price: float,
     role: AgentRole,
     round_number: int,
 ) -> ToolCallEvent:
     observed_price = _agent_market_price(
-        baseline_price=baseline_price,
+        reference_market_price=reference_market_price,
         role=role,
         round_number=round_number,
     )
+    shock = get_shock_registry().consume(run_id)
+    shocked_price = observed_price
+    disruption_note = None
+    arguments: dict[str, str | int | float | bool | None] = {
+        "run_id": run_id,
+        "negotiation_id": negotiation_id,
+        "product": product_name,
+        "observed_market_price": observed_price,
+    }
+    result_summary = f"Observed market reference price: {observed_price:.2f}."
+
+    if shock is not None:
+        shocked_price = round(observed_price * shock.multiplier, 2)
+        disruption_note = (
+            f"{shock.headline} Reference price moved from {observed_price:.2f} to {shocked_price:.2f}."
+        )
+        arguments = {
+            **arguments,
+            "base_market_price": observed_price,
+            "observed_market_price": shocked_price,
+            "shock_type": shock.shock_type,
+            "shock_multiplier": shock.multiplier,
+            "shock_headline": shock.headline,
+            "disruption_note": disruption_note,
+        }
+        result_summary = (
+            f"Observed disrupted market reference price: {shocked_price:.2f}. {shock.headline}"
+        )
+
     return ToolCallEvent(
         id=f"tool-{uuid4().hex[:8]}",
         step_index=step_index,
         agent_id=agent_id,
         tool_name="check_market_price",
-        arguments={
-            "negotiation_id": negotiation_id,
-            "product": product_name,
-            "observed_market_price": observed_price,
-        },
-        result_summary=f"Observed market reference price: {observed_price:.2f}.",
+        arguments=arguments,
+        result_summary=result_summary,
         created_at=utc_now(),
     )
 
 
 def _agent_market_price(
-    baseline_price: float,
+    reference_market_price: float,
     role: AgentRole,
     round_number: int,
 ) -> float:
     role_bias = {
-        AgentRole.SUPPLIER: 4.0,
-        AgentRole.MANUFACTURER: 0.75,
-        AgentRole.RETAILER: -2.5,
+        AgentRole.SUPPLIER: 0.18,
+        AgentRole.MANUFACTURER: 0.05,
+        AgentRole.RETAILER: -0.12,
     }[role]
-    round_bias = (round_number - 1) * 0.4
-    return round(baseline_price + role_bias + round_bias, 2)
+    round_bias = ((round_number - 1) % 3 - 1) * 0.04
+    return round(reference_market_price + role_bias + round_bias, 2)
 
 
 def _coerce_price(value: object) -> float | None:
@@ -2074,7 +2173,7 @@ def _build_harvest_pressure_scenario(rng: Random, seed: int, index: int):
         manufacturer_min_sell_price=manufacturer_min_sell_price,
         retailer_max_buy_price=retailer_max_buy_price,
         manufacturer_margin_floor=manufacturer_margin_floor,
-        max_rounds=rng.randint(3, 5),
+        max_rounds=rng.randint(5, 7),
     )
 
 
@@ -2100,7 +2199,7 @@ def _build_packaging_cost_scenario(rng: Random, seed: int, index: int):
         manufacturer_min_sell_price=manufacturer_min_sell_price,
         retailer_max_buy_price=retailer_max_buy_price,
         manufacturer_margin_floor=manufacturer_margin_floor,
-        max_rounds=rng.randint(3, 5),
+        max_rounds=rng.randint(4, 6),
     )
 
 
@@ -2126,7 +2225,7 @@ def _build_retail_promotion_scenario(rng: Random, seed: int, index: int):
         manufacturer_min_sell_price=manufacturer_min_sell_price,
         retailer_max_buy_price=retailer_max_buy_price,
         manufacturer_margin_floor=manufacturer_margin_floor,
-        max_rounds=rng.randint(3, 5),
+        max_rounds=rng.randint(4, 6),
     )
 
 

@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 
 import { ErrorState } from "./error-state";
 import { LiveRunDetail } from "./live-run-detail";
+import { RunStripCard } from "./run-strip-card";
 import {
   RunDetailResponse,
   RunSummary,
 } from "../lib/api-types";
-import { formatDateTime, formatLabel } from "../lib/format";
 
 
 type RunsWorkspaceProps = {
@@ -145,10 +145,8 @@ export function RunsWorkspace({
       {visibleRuns.length > 0 ? (
         <section className={stripClassName}>
           {visibleRuns.map((run) => (
-            <button
-              className={`run-strip-card ${selectedRunId === run.id ? "active" : ""} ${
-                visibleRuns.length === 1 ? "single" : ""
-              }`}
+            <RunStripCard
+              active={selectedRunId === run.id}
               key={run.id}
               onClick={() => {
                 setSelectedRunId(run.id);
@@ -158,23 +156,9 @@ export function RunsWorkspace({
                   scroll: false,
                 });
               }}
-              type="button"
-            >
-              <div className="run-strip-header">
-                <strong>{run.id}</strong>
-                <span className={`badge ${run.status === "running" ? "pulse" : ""}`}>
-                  {formatLabel(run.status)}
-                </span>
-              </div>
-              <div className="run-strip-body">
-                <div className="run-strip-title">{run.title}</div>
-                <div className="run-meta">
-                  <span>{formatDateTime(run.updated_at)}</span>
-                  <span>{run.step_count} steps</span>
-                  <span>{formatLabel(run.current_phase)}</span>
-                </div>
-              </div>
-            </button>
+              run={run}
+              single={visibleRuns.length === 1}
+            />
           ))}
         </section>
       ) : null}

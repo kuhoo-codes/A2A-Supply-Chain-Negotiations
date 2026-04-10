@@ -89,6 +89,7 @@ export type RunEventType =
   | "agent_turn"
   | "tool_call"
   | "market_price_check"
+  | "market_shock"
   | "offer_made"
   | "offer_received"
   | "accept"
@@ -111,6 +112,10 @@ export type RunEvent = {
   reasoning_summary: string | null;
   negotiation_id: string | null;
   tool_name: string | null;
+  previous_market_price: number | null;
+  shock_type: ShockType | null;
+  shock_multiplier: number | null;
+  shock_headline: string | null;
 };
 
 export type RunEventLog = {
@@ -141,6 +146,13 @@ export type DeliveredMessage = {
   note: string | null;
   from_agent_id: string | null;
 };
+
+export type ShockType =
+  | "price_spike"
+  | "supply_shortage"
+  | "demand_surge"
+  | "geopolitical"
+  | "price_drop";
 
 export type DiagnosisSummary = {
   outcome: string;
@@ -238,4 +250,23 @@ export type RunDetailResponse = {
   export_artifacts: RunDetailExportArtifacts | null;
   derived: Record<string, unknown> | null;
   conversation: ConversationMessage[] | null;
+};
+
+export type RunShockRequest = {
+  shock_type: ShockType;
+};
+
+export type RunShockResponse = {
+  run_id: string;
+  shock_type: ShockType;
+  multiplier: number;
+  headline: string;
+  consumed: boolean;
+  queued_at: string;
+};
+
+export type RunEventStreamPayload = {
+  type: "run_event";
+  run_id: string;
+  event: RunEvent;
 };

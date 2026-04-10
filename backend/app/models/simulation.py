@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from backend.app.models.run import RunEventLog, RunRecord
+from backend.app.models.run import RunEvent, RunEventLog, RunRecord
 
 
 class PipelineDependencyStatus(BaseModel):
@@ -56,3 +56,22 @@ class RunDetailResponse(BaseModel):
     export_artifacts: RunDetailExportArtifacts | None = None
     derived: dict | None = None
     conversation: list[dict] | None = None
+
+
+class RunShockRequest(BaseModel):
+    shock_type: str
+
+
+class RunShockResponse(BaseModel):
+    run_id: str
+    shock_type: str
+    multiplier: float
+    headline: str
+    consumed: bool = False
+    queued_at: datetime
+
+
+class RunEventStreamPayload(BaseModel):
+    type: str = "run_event"
+    run_id: str
+    event: RunEvent

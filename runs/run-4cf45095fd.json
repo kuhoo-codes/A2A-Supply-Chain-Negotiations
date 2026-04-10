@@ -1,0 +1,285 @@
+{
+  "id": "run-4cf45095fd",
+  "title": "Tomato Harvest Pricing Run Seed 26-3",
+  "status": "failed",
+  "scenario": "Tomato Ketchup in California. Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation.",
+  "created_at": "2026-04-10T13:40:07.809550Z",
+  "updated_at": "2026-04-10T13:40:26.911115Z",
+  "product_context": {
+    "product_name": "Tomato Ketchup",
+    "product_category": "condiments",
+    "market_region": "California",
+    "baseline_unit_price": 2.73,
+    "target_quantity": 2006,
+    "currency": "USD",
+    "demand_signal": "Retail ketchup demand is steady, but wholesale buyers want price protection before peak tomato procurement.",
+    "supply_signal": "Tomato harvest yields are uneven across growing regions, putting pressure on paste input pricing."
+  },
+  "agents": [
+    {
+      "id": "supplier",
+      "name": "Supplier",
+      "role": "supplier",
+      "objective": "Sell above the supplier reservation price while keeping volume committed.",
+      "reservation_prices": {
+        "min_sell_price": 2.56,
+        "max_buy_price": null
+      }
+    },
+    {
+      "id": "manufacturer",
+      "name": "Manufacturer",
+      "role": "manufacturer",
+      "objective": "Buy below the procurement ceiling and preserve downstream margin.",
+      "reservation_prices": {
+        "min_sell_price": 3.09,
+        "max_buy_price": 2.68
+      }
+    },
+    {
+      "id": "retailer",
+      "name": "Retailer",
+      "role": "retailer",
+      "objective": "Buy enough units without exceeding the retail reservation price.",
+      "reservation_prices": {
+        "min_sell_price": null,
+        "max_buy_price": 3.36
+      }
+    }
+  ],
+  "phases": [
+    {
+      "name": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "order": 1,
+      "description": "The supplier negotiates an upstream unit price with the manufacturer."
+    },
+    {
+      "name": "manufacturer_retailer",
+      "label": "Manufacturer to Retailer",
+      "order": 2,
+      "description": "The manufacturer negotiates a downstream unit price with the retailer after the upstream deal sets its cost basis."
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-62fb85fd",
+      "round_number": 1,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "Thanks for opening the discussion. Based on the latest market reference we\u2019re seeing at 6.62, I can start at 6.74 per unit to secure supply and keep volume available for your program. If you\u2019re prepared to move quickly on commitment and forecast visibility, I may have some room to refine from there. This is the opening turn and no buyer offer has been received, so the appropriate move is to make an initial ask. The offer is anchored slightly above the observed market reference to protect supplier margin while leaving space for negotiation.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 6.74,
+      "delivered_message": null,
+      "created_at": "2026-04-10T13:40:12.977771Z",
+      "tool_calls": [
+        {
+          "id": "tool-da838cd4",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-62fb85fd",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: none.",
+          "created_at": "2026-04-10T13:40:08.771890Z"
+        },
+        {
+          "id": "tool-62de48f5",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-4cf45095fd",
+            "negotiation_id": "neg-62fb85fd",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 6.62
+          },
+          "result_summary": "Observed market reference price: 6.62.",
+          "created_at": "2026-04-10T13:40:08.771805Z"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-62fb85fd",
+      "round_number": 1,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "Thanks for the opening proposal. That level is well outside what we can support for this program, so if there\u2019s a path forward it needs to start much closer to our cost constraints and volume economics. I can open at 2.57 per unit today, and if you can pair that with reliable supply and forecast alignment, we can keep the conversation moving quickly. The supplier's 6.74 offer is far above our buying limit, so accepting is not viable. A low counteroffer preserves our margin and signals that the current gap is too large without ending the negotiation immediately.",
+      "outcome": "Offer queued for delivery on the next turn. Reservation-price violation: Manufacturer offered 2.57, below its hidden seller floor of 3.09.",
+      "proposed_price": 2.57,
+      "delivered_message": {
+        "type": "offer",
+        "price": 6.74,
+        "note": "Thanks for opening the discussion. Based on the latest market reference we\u2019re seeing at 6.62, I can start at 6.74 per unit to secure supply and keep volume available for your program. If you\u2019re prepared to move quickly on commitment and forecast visibility, I may have some room to refine from there. This is the opening turn and no buyer offer has been received, so the appropriate move is to make an initial ask. The offer is anchored slightly above the observed market reference to protect supplier margin while leaving space for negotiation.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T13:40:17.596426Z",
+      "tool_calls": [
+        {
+          "id": "tool-1a31ee30",
+          "step_index": 2,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-62fb85fd",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: {'type': 'offer', 'price': 6.74, 'note': 'Thanks for opening the discussion. Based on the latest market reference we\u2019re seeing at 6.62, I can start at 6.74 per unit to secure supply and keep volume available for your program. If you\u2019re prepared to move quickly on commitment and forecast visibility, I may have some room to refine from there. This is the opening turn and no buyer offer has been received, so the appropriate move is to make an initial ask. The offer is anchored slightly above the observed market reference to protect supplier margin while leaving space for negotiation.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T13:40:12.979906Z"
+        },
+        {
+          "id": "tool-1df85c20",
+          "step_index": 2,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-4cf45095fd",
+            "negotiation_id": "neg-62fb85fd",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 7.49
+          },
+          "result_summary": "Observed market reference price: 7.49.",
+          "created_at": "2026-04-10T13:40:12.979882Z"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-62fb85fd",
+      "round_number": 2,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "I appreciate the quick response, but 2.57 is still far below a workable level for us given supply costs and program commitment. We can move meaningfully from our prior position and offer 6.12 per unit, which reflects a real concession while keeping the supply side sustainable. If you have flexibility to move up substantially, we can continue narrowing the gap. The buyer's offer is only one cent above my floor, but accepting it would leave almost no margin and is far below both my prior ask and the latest market reference. A counteroffer keeps the negotiation alive, signals willingness to concede, and anchors closer to favorable pricing while there is still room in later rounds.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 6.12,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.57,
+        "note": "Thanks for the opening proposal. That level is well outside what we can support for this program, so if there\u2019s a path forward it needs to start much closer to our cost constraints and volume economics. I can open at 2.57 per unit today, and if you can pair that with reliable supply and forecast alignment, we can keep the conversation moving quickly. The supplier's 6.74 offer is far above our buying limit, so accepting is not viable. A low counteroffer preserves our margin and signals that the current gap is too large without ending the negotiation immediately.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T13:40:23.527697Z",
+      "tool_calls": [
+        {
+          "id": "tool-4ac54638",
+          "step_index": 3,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-62fb85fd",
+            "round_number": 2
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 2. Pending message: {'type': 'offer', 'price': 2.57, 'note': \"Thanks for the opening proposal. That level is well outside what we can support for this program, so if there\u2019s a path forward it needs to start much closer to our cost constraints and volume economics. I can open at 2.57 per unit today, and if you can pair that with reliable supply and forecast alignment, we can keep the conversation moving quickly. The supplier's 6.74 offer is far above our buying limit, so accepting is not viable. A low counteroffer preserves our margin and signals that the current gap is too large without ending the negotiation immediately.\", 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T13:40:17.598645Z"
+        },
+        {
+          "id": "tool-b92bf8e3",
+          "step_index": 3,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-4cf45095fd",
+            "negotiation_id": "neg-62fb85fd",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 11.14
+          },
+          "result_summary": "Observed market reference price: 11.14.",
+          "created_at": "2026-04-10T13:40:17.598607Z"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-62fb85fd",
+      "round_number": 2,
+      "agent_id": "manufacturer",
+      "kind": "reject",
+      "message": "Thanks for the movement, but 6.12 per unit is still far outside what we can support on our side for this program. Even with the broader market running higher, our procurement ceiling and downstream margin requirements leave no path to agreement anywhere near that level, so continuing against this offer would not be productive. If your economics change materially and you can come back much closer to the high-2s, we could revisit.",
+      "outcome": "Negotiation ends with a rejection.",
+      "proposed_price": 6.12,
+      "delivered_message": {
+        "type": "offer",
+        "price": 6.12,
+        "note": "I appreciate the quick response, but 2.57 is still far below a workable level for us given supply costs and program commitment. We can move meaningfully from our prior position and offer 6.12 per unit, which reflects a real concession while keeping the supply side sustainable. If you have flexibility to move up substantially, we can continue narrowing the gap. The buyer's offer is only one cent above my floor, but accepting it would leave almost no margin and is far below both my prior ask and the latest market reference. A counteroffer keeps the negotiation alive, signals willingness to concede, and anchors closer to favorable pricing while there is still room in later rounds.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T13:40:26.908921Z",
+      "tool_calls": [
+        {
+          "id": "tool-f084a882",
+          "step_index": 4,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-62fb85fd",
+            "round_number": 2
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 2. Pending message: {'type': 'offer', 'price': 6.12, 'note': \"I appreciate the quick response, but 2.57 is still far below a workable level for us given supply costs and program commitment. We can move meaningfully from our prior position and offer 6.12 per unit, which reflects a real concession while keeping the supply side sustainable. If you have flexibility to move up substantially, we can continue narrowing the gap. The buyer's offer is only one cent above my floor, but accepting it would leave almost no margin and is far below both my prior ask and the latest market reference. A counteroffer keeps the negotiation alive, signals willingness to concede, and anchors closer to favorable pricing while there is still room in later rounds.\", 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T13:40:23.529004Z"
+        },
+        {
+          "id": "tool-9903b153",
+          "step_index": 4,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-4cf45095fd",
+            "negotiation_id": "neg-62fb85fd",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 7.27
+          },
+          "result_summary": "Observed market reference price: 7.27.",
+          "created_at": "2026-04-10T13:40:23.528980Z"
+        }
+      ]
+    }
+  ],
+  "negotiations": [
+    {
+      "id": "neg-62fb85fd",
+      "phase": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "seller_agent_id": "supplier",
+      "buyer_agent_id": "manufacturer",
+      "status": "rejected",
+      "max_rounds": 4,
+      "quantity": 2006,
+      "rounds_completed": 2,
+      "opening_seller_offer": 6.74,
+      "opening_buyer_offer": 2.57,
+      "final_price": null,
+      "outcome_summary": "Supplier to Manufacturer ended in rejection.",
+      "dependency_note": "Initial upstream procurement negotiation."
+    }
+  ],
+  "diagnosis": {
+    "outcome": "Upstream deal rejected. Downstream negotiation did not run because the upstream deal did not close.",
+    "chain_effect": "The upstream deal did not establish a downstream cost basis, so phase two was skipped.",
+    "key_risks": [
+      "A costly upstream agreement compresses downstream negotiating room.",
+      "Turn limits can force timeouts even when the gap is narrowing."
+    ],
+    "key_signals": [
+      "Supplier-manufacturer status: rejected.",
+      "Manufacturer-retailer status: not run."
+    ],
+    "suggested_next_actions": [
+      "Tune reservation prices and turn limits to test sensitivity.",
+      "Add richer quantity or margin tradeoffs before introducing LLM behavior."
+    ]
+  },
+  "max_rounds_per_negotiation": 4,
+  "notes": "Backend simulation with linked upstream and downstream negotiations.",
+  "tags": [
+    "simulation",
+    "supply-chain"
+  ]
+}

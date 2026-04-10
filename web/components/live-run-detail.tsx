@@ -3,11 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  ConversationMessage,
   NegotiationRecord,
   PhaseName,
   RunDetailResponse,
   RunEvent,
   RunRecord,
+  RunEventStreamPayload,
+  RunShockResponse,
+  ShockType,
 } from "../lib/api-types";
 import { formatDateTime, formatLabel } from "../lib/format";
 
@@ -55,6 +59,35 @@ type BeliefGapSample = {
   belief_gap: number;
 };
 
+type FeedItem =
+  | {
+      key: string;
+      type: "message";
+      timestamp: string;
+      phase: PhaseName;
+      speakerId: string;
+      speakerName: string;
+      speakerLabel: string;
+      round: number;
+      kind: string;
+      priceLabel: string;
+      body: string;
+      isNew: boolean;
+    }
+  | {
+      key: string;
+      type: "activity";
+      timestamp: string;
+      phase: PhaseName;
+      speakerId: string;
+      speakerName: string;
+      speakerLabel: string;
+      round: number;
+      kind: string;
+      priceLabel: string;
+      body: string;
+    };
+
 const CHAT_PHASES: PhaseName[] = [
   "supplier_manufacturer",
   "manufacturer_retailer",
@@ -65,6 +98,10 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [highlightedMessageIndex, setHighlightedMessageIndex] = useState<number | null>(null);
+  const [selectedShockType, setSelectedShockType] = useState<ShockType>("price_spike");
+  const [shockRequestState, setShockRequestState] = useState<"idle" | "sending" | "queued" | "error">("idle");
+  const [shockFeedback, setShockFeedback] = useState<string | null>(null);
+  const [streamedEvents, setStreamedEvents] = useState<RunEvent[]>([]);
   const previousMessageCount = useRef(initialDetail.conversation?.length ?? 0);
 
   useEffect(() => {
@@ -72,8 +109,41 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
     setRefreshError(null);
     setIsRefreshing(false);
     setHighlightedMessageIndex(null);
+    setStreamedEvents([]);
+    setShockRequestState("idle");
+    setShockFeedback(null);
     previousMessageCount.current = initialDetail.conversation?.length ?? 0;
   }, [initialDetail]);
+
+  useEffect(() => {
+    if (detail.run.status !== "running") {
+      return undefined;
+    }
+
+    const eventSource = new EventSource(`/api/runs/${detail.run.id}/events`);
+    const handleRunEvent = (rawEvent: MessageEvent<string>) => {
+      const payload = JSON.parse(rawEvent.data) as RunEventStreamPayload;
+      setStreamedEvents((currentEvents) => {
+        if (
+          currentEvents.some((event) => getRunEventKey(event) === getRunEventKey(payload.event))
+        ) {
+          return currentEvents;
+        }
+
+        return [...currentEvents, payload.event];
+      });
+    };
+
+    eventSource.addEventListener("run-event", handleRunEvent as EventListener);
+    eventSource.onerror = () => {
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.removeEventListener("run-event", handleRunEvent as EventListener);
+      eventSource.close();
+    };
+  }, [detail.run.id, detail.run.status]);
 
   useEffect(() => {
     if (detail.run.status !== "running") {
@@ -119,10 +189,11 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
   const run = detail.run;
   const conversation = detail.conversation ?? [];
   const eventLog = detail.event_log?.events ?? [];
+  const allEvents = dedupeRunEvents([...eventLog, ...streamedEvents]);
   const beliefSamples =
     normalizeBeliefSamples(detail.derived?.belief_gap_samples).length > 0
       ? normalizeBeliefSamples(detail.derived?.belief_gap_samples)
-      : buildBeliefSamplesFromEvents(eventLog, run.product_context.baseline_unit_price);
+      : buildBeliefSamplesFromEvents(allEvents, run.product_context.baseline_unit_price);
   const averageBeliefGap =
     typeof detail.derived?.average_belief_gap === "number"
       ? detail.derived.average_belief_gap
@@ -149,11 +220,19 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
   );
   const chatColumns = CHAT_PHASES.map((phase) => {
     const negotiation = negotiationByPhase.get(phase);
+    const phaseMessages = conversation.filter((message) => message.phase === phase);
     return {
       phase,
       negotiation,
       label: negotiation?.label ?? formatLabel(phase),
-      messages: conversation.filter((message) => message.phase === phase),
+      messages: phaseMessages,
+      feedItems: buildPhoneFeedItems({
+        phase,
+        messages: phaseMessages,
+        events: allEvents,
+        currency: run.product_context.currency,
+        highlightedMessageIndex,
+      }),
     };
   });
 
@@ -165,13 +244,159 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
       ? roundMoney(manufacturerMargin * run.product_context.target_quantity)
       : null;
   const transcriptMessages = [...conversation].sort((left, right) => left.index - right.index);
-  const orderedEvents = [...eventLog].reverse();
+  const orderedEvents = [...allEvents].reverse();
   const liveStatusLabel = isRefreshing ? "Syncing" : "Live";
+  const isRunLive = run.status === "running";
+
+  async function handleShockInject() {
+    setShockRequestState("sending");
+    setShockFeedback(null);
+
+    try {
+      const response = await fetch(`/api/runs/${run.id}/shock`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ shock_type: selectedShockType }),
+      });
+      const payload = (await response.json()) as {
+        data: RunShockResponse | null;
+        error: string | null;
+      };
+
+      if (!response.ok || !payload.data) {
+        setShockRequestState("error");
+        setShockFeedback(payload.error ?? "Unable to queue the market shock.");
+        return;
+      }
+
+      setShockRequestState("queued");
+      setShockFeedback(`Queued: ${payload.data.headline}`);
+    } catch {
+      setShockRequestState("error");
+      setShockFeedback("Unable to queue the market shock.");
+    }
+  }
+
+  function handleDownloadLog() {
+    const payload = buildRunLogText({
+      run,
+      messages: transcriptMessages,
+      events: orderedEvents,
+      suspectedFailureType,
+      whereRunFailed,
+    });
+    const blob = new Blob([payload], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${run.id}-log.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <main className="detail-layout live-detail">
-      <section className="detail-top-grid">
-        <section className="panel chat-panel">
+      <section className="detail-shell">
+        <aside className="detail-sidebar-stack">
+          <article className="shock-control-card">
+            <div className="eyebrow">Operator Shock</div>
+            <h2>Inject Market Event</h2>
+            <p>
+              Queue a disruption for the next market-price check. The agents will be warned
+              before the next live decision turn.
+            </p>
+            <label className="field">
+              <span>Shock Type</span>
+              <select
+                className="run-selector"
+                disabled={!isRunLive || shockRequestState === "sending"}
+                onChange={(event) => {
+                  setSelectedShockType(event.target.value as ShockType);
+                  setShockRequestState("idle");
+                  setShockFeedback(null);
+                }}
+                value={selectedShockType}
+              >
+                <option value="price_spike">Price Spike</option>
+                <option value="supply_shortage">Supply Shortage</option>
+                <option value="demand_surge">Demand Surge</option>
+                <option value="geopolitical">Geopolitical Event</option>
+                <option value="price_drop">Price Drop</option>
+              </select>
+            </label>
+            <button
+              className="button primary"
+              disabled={!isRunLive || shockRequestState === "sending"}
+              onClick={handleShockInject}
+              type="button"
+            >
+              {shockRequestState === "sending" ? "Sending..." : "Inject Event"}
+            </button>
+            {shockRequestState === "queued" ? (
+              <p className="inline-success">✓ Queued</p>
+            ) : null}
+            {shockRequestState === "error" && shockFeedback ? (
+              <p className="inline-error">{shockFeedback}</p>
+            ) : null}
+            {shockRequestState === "queued" && shockFeedback ? (
+              <p className="muted-copy">{shockFeedback}</p>
+            ) : null}
+            {!isRunLive ? (
+              <p className="muted-copy">Shock injection unlocks only while this run is live.</p>
+            ) : null}
+          </article>
+
+          <article className="detail-summary-panel">
+            <div className="eyebrow">Run Detail</div>
+            <h1>{run.title}</h1>
+            <p>{run.scenario}</p>
+
+            <div className="summary-grid">
+              <div className="summary-item">
+                <span className="summary-label">Status</span>
+                <span className={`badge ${run.status === "running" ? "pulse" : ""}`}>
+                  {formatLabel(run.status)}
+                </span>
+              </div>
+              <div className="summary-item">
+                <span className="summary-label">Created</span>
+                <span>{formatDateTime(run.created_at)}</span>
+              </div>
+              <div className="summary-item">
+                <span className="summary-label">Product</span>
+                <span>{run.product_context.product_name}</span>
+              </div>
+              <div className="summary-item">
+                <span className="summary-label">Market</span>
+                <span>{run.product_context.market_region}</span>
+              </div>
+              <div className="summary-item">
+                <span className="summary-label">Quantity</span>
+                <span>{run.product_context.target_quantity}</span>
+              </div>
+              <div className="summary-item">
+                <span className="summary-label">Baseline Price</span>
+                <span>{formatCurrency(run.product_context.baseline_unit_price, run.product_context.currency)}</span>
+              </div>
+            </div>
+
+            <div className="hero-actions">
+              {run.status === "running" ? (
+                <span className="badge leaf">{liveStatusLabel}</span>
+              ) : null}
+            </div>
+            {refreshError ? <p className="inline-error">{refreshError}</p> : null}
+          </article>
+        </aside>
+
+        <div className="detail-main-stack">
+          <div className="detail-main-center">
+          <section className="detail-top-grid">
+            <section className="panel chat-panel">
           <div className="section-heading">
             <div>
               <div className="eyebrow">1. Chats Between The Agents</div>
@@ -201,34 +426,40 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
                   <div className="phone-header">
                     <span>9:41</span>
                     <span>{column.label}</span>
-                    <span>{column.messages.length} msgs</span>
+                    <span>{column.feedItems.length} items</span>
                   </div>
                   <div className="phone-thread">
-                    {column.messages.length > 0 ? (
-                      column.messages.map((message) => (
-                        <article
-                          className={`iphone-bubble ${
-                            isOutgoingMessage(column.phase, message.speaker_id)
+                    {column.feedItems.length > 0 ? (
+                      column.feedItems.map((item) => {
+                        const isOutgoing = isOutgoingMessage(column.phase, item.speakerId);
+                        const bubbleTone =
+                          item.speakerId === "market_desk" || item.kind === "system_notice"
+                            ? "system-notice"
+                            : item.type === "activity" && item.kind === "market_shock"
+                            ? "shock-bar"
+                            : item.type === "activity"
+                            ? `activity ${isOutgoing ? "outgoing" : "incoming"}`
+                            : isOutgoing
                               ? "outgoing"
-                              : "incoming"
-                          } ${
-                            highlightedMessageIndex === message.index ? "is-new" : ""
-                          }`}
-                          key={message.index}
-                        >
-                          <span className="bubble-speaker">{message.speaker_name}</span>
-                          <p>{message.message}</p>
-                          <div className="bubble-meta">
-                            <span>Round {message.round}</span>
-                            <span>{formatLabel(message.kind)}</span>
-                            <span>
-                              {message.offer_price !== null
-                                ? formatCurrency(message.offer_price, message.currency)
-                                : "No price"}
-                            </span>
-                          </div>
-                        </article>
-                      ))
+                              : "incoming";
+
+                        return (
+                          <article
+                            className={`iphone-bubble ${bubbleTone} ${
+                              item.type === "message" && item.isNew ? "is-new" : ""
+                            }`}
+                            key={item.key}
+                          >
+                            <span className="bubble-speaker">{item.speakerLabel}</span>
+                            <p>{item.body}</p>
+                            <div className="bubble-meta">
+                              <span>Round {item.round}</span>
+                              <span>{formatLabel(item.kind)}</span>
+                              <span>{item.priceLabel}</span>
+                            </div>
+                          </article>
+                        );
+                      })
                     ) : (
                       <div className="phase-empty">
                         {run.status === "running"
@@ -241,10 +472,10 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
               </article>
             ))}
           </div>
-        </section>
+            </section>
 
-        <div className="chart-stack">
-          <section className="panel compact-panel">
+            <div className="chart-stack">
+              <section className="panel compact-panel">
             <div className="section-heading">
               <div>
                 <div className="eyebrow">2. Supplier Vs Manufacturer Price Chart</div>
@@ -256,9 +487,9 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
               data={supplierManufacturerChart}
               compact
             />
-          </section>
+              </section>
 
-          <section className="panel compact-panel">
+              <section className="panel compact-panel">
             <div className="section-heading">
               <div>
                 <div className="eyebrow">3. Manufacturer Vs Retailer Price Chart</div>
@@ -270,53 +501,11 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
               data={manufacturerRetailerChart}
               compact
             />
+              </section>
+            </div>
           </section>
-        </div>
-      </section>
 
-      <section className="detail-summary-panel">
-        <div className="eyebrow">Run Detail</div>
-        <h1>{run.title}</h1>
-        <p>{run.scenario}</p>
-
-        <div className="summary-grid">
-          <div className="summary-item">
-            <span className="summary-label">Status</span>
-            <span className={`badge ${run.status === "running" ? "pulse" : ""}`}>
-              {formatLabel(run.status)}
-            </span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Created</span>
-            <span>{formatDateTime(run.created_at)}</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Product</span>
-            <span>{run.product_context.product_name}</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Market</span>
-            <span>{run.product_context.market_region}</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Quantity</span>
-            <span>{run.product_context.target_quantity}</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Baseline Price</span>
-            <span>{formatCurrency(run.product_context.baseline_unit_price, run.product_context.currency)}</span>
-          </div>
-        </div>
-
-        <div className="hero-actions">
-          {run.status === "running" ? (
-            <span className="badge leaf">{liveStatusLabel}</span>
-          ) : null}
-        </div>
-        {refreshError ? <p className="inline-error">{refreshError}</p> : null}
-      </section>
-
-      <section className="panel">
+          <section className="panel">
         <div className="section-heading">
           <div>
             <div className="eyebrow">4. Belief Comparison Panel</div>
@@ -484,90 +673,31 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
       <section className="panel">
         <div className="section-heading">
           <div>
-            <div className="eyebrow">7. Transcript And Event Log Below</div>
-            <h2>Full execution record</h2>
+            <div className="eyebrow">7. Download Log</div>
+            <h2>Export full execution record</h2>
           </div>
         </div>
         <div className="detail-columns two-up">
-          <div>
-            <div className="eyebrow">Transcript</div>
-            {transcriptMessages.length > 0 ? (
-              <div className="conversation-stack">
-                {transcriptMessages.map((message) => (
-                  <article className="conversation-card" key={message.index}>
-                    <div className="step-header">
-                      <div>
-                        <strong>{message.speaker_name}</strong>
-                        <span className="step-role">
-                          {message.speaker_role
-                            ? formatLabel(message.speaker_role)
-                            : "System"}
-                        </span>
-                      </div>
-                      <span className="step-kind">
-                        {formatLabel(message.phase)} · Round {message.round}
-                      </span>
-                    </div>
-                    <p>{message.message}</p>
-                    <div className="run-meta">
-                      <span>{formatDateTime(message.timestamp)}</span>
-                      <span>{formatLabel(message.kind)}</span>
-                      <span>
-                        {message.offer_price !== null
-                          ? formatCurrency(message.offer_price, message.currency)
-                          : "No price"}
-                      </span>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="phase-empty">No saved transcript is available for this run.</div>
-            )}
+          <div className="card">
+            <div className="eyebrow">TXT Export</div>
+            <h3>Transcript, event log, diagnosis</h3>
+            <p>
+              Download a plain-text run log with the full transcript, structured event
+              timeline, diagnosis, and pricing context.
+            </p>
+            <div className="run-meta">
+              <span>{transcriptMessages.length} transcript messages</span>
+              <span>{orderedEvents.length} events</span>
+              <span>{run.id}</span>
+            </div>
+            <div className="hero-actions">
+              <button className="button primary" onClick={handleDownloadLog} type="button">
+                Download Log
+              </button>
+            </div>
           </div>
-          <div>
-            <div className="eyebrow">Event Log</div>
-            {orderedEvents.length > 0 ? (
-              <div className="event-stack">
-                {orderedEvents.map((event, index) => (
-                  <article className="event-card" key={`${event.timestamp}-${index}`}>
-                    <div className="step-header">
-                      <div>
-                        <strong>{formatLabel(event.event_type)}</strong>
-                        <span className="step-role">
-                          {event.agent ? formatLabel(event.agent) : "System"}
-                        </span>
-                      </div>
-                      <span className="step-kind">
-                        {event.phase ? formatLabel(event.phase) : "Run"}
-                        {event.round ? ` · Round ${event.round}` : ""}
-                      </span>
-                    </div>
-                    <div className="run-meta">
-                      <span>{formatDateTime(event.timestamp)}</span>
-                      <span>
-                        Offer:{" "}
-                        {event.offer_price !== null
-                          ? formatCurrency(event.offer_price, run.product_context.currency)
-                          : "n/a"}
-                      </span>
-                      <span>
-                        Market:{" "}
-                        {event.observed_market_price !== null
-                          ? formatCurrency(
-                              event.observed_market_price,
-                              run.product_context.currency,
-                            )
-                          : "n/a"}
-                      </span>
-                    </div>
-                    <p>{event.note ?? "No additional note recorded."}</p>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="phase-empty">No event log is available for this run.</div>
-            )}
+        </div>
+      </section>
           </div>
         </div>
       </section>
@@ -742,6 +872,263 @@ function buildBeliefSamplesFromEvents(events: RunEvent[], trueMarketPrice: numbe
       true_market_price: trueMarketPrice,
       belief_gap: roundMoney((event.observed_market_price ?? trueMarketPrice) - trueMarketPrice),
     }));
+}
+
+function getRunEventKey(event: RunEvent): string {
+  return [
+    event.timestamp,
+    event.event_type,
+    event.agent ?? "system",
+    event.phase ?? "run",
+    event.round ?? "na",
+    event.shock_headline ?? "none",
+    event.offer_price ?? "na",
+    event.observed_market_price ?? "na",
+  ].join(":");
+}
+
+function dedupeRunEvents(events: RunEvent[]): RunEvent[] {
+  const unique = new Map<string, RunEvent>();
+
+  for (const event of events) {
+    unique.set(getRunEventKey(event), event);
+  }
+
+  return Array.from(unique.values()).sort(
+    (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
+  );
+}
+
+function buildPhoneFeedItems({
+  phase,
+  messages,
+  events,
+  currency,
+  highlightedMessageIndex,
+}: {
+  phase: PhaseName;
+  messages: ConversationMessage[];
+  events: RunEvent[];
+  currency: string;
+  highlightedMessageIndex: number | null;
+}): FeedItem[] {
+  const messageItems: FeedItem[] = messages.map((message) => ({
+    key: `message:${message.index}`,
+    type: "message",
+    timestamp: message.timestamp,
+    phase: message.phase,
+    speakerId: message.speaker_id,
+    speakerName: message.speaker_name,
+    speakerLabel: message.speaker_name,
+    round: message.round,
+    kind: message.kind,
+    priceLabel:
+      message.offer_price !== null
+        ? formatCurrency(message.offer_price, message.currency)
+        : "No price",
+    body: message.message,
+    isNew: highlightedMessageIndex === message.index,
+  }));
+
+  const activityItems: FeedItem[] = events
+    .filter((event) => event.phase === phase)
+    .filter(
+      (event) =>
+        event.event_type === "market_shock" ||
+        (event.event_type === "agent_turn" && Boolean(event.reasoning_summary)) ||
+        event.event_type === "offer_received" ||
+        (event.event_type === "tool_call" &&
+          (event.action === "review_state" || event.action === "check_market_price")),
+    )
+    .map((event) => ({
+      key: `activity:${getRunEventKey(event)}`,
+      type: "activity",
+      timestamp: event.timestamp,
+      phase,
+      speakerId: event.agent ?? "system",
+      speakerName: getEventSpeakerName(event),
+      speakerLabel:
+        event.event_type === "market_shock"
+          ? "Market Shock"
+          : event.event_type === "agent_turn" && event.reasoning_summary
+          ? `${getEventSpeakerName(event)} (Thinking)`
+          : getEventSpeakerName(event),
+      round: event.round ?? 0,
+      kind:
+        event.event_type === "market_shock"
+          ? "market_shock"
+          : event.event_type === "agent_turn"
+          ? "thinking"
+          : event.event_type === "offer_received"
+          ? "offer_received"
+          : event.action === "check_market_price"
+            ? "market_check"
+            : "review_state",
+      priceLabel:
+        event.event_type === "market_shock"
+          ? "Injected event"
+          : event.offer_price !== null
+          ? formatCurrency(event.offer_price, currency)
+          : event.observed_market_price !== null
+            ? formatCurrency(event.observed_market_price, currency)
+            : "In progress",
+      body: describeActivityEvent(event, currency),
+    }));
+
+  return [...messageItems, ...activityItems].sort(
+    (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
+  );
+}
+
+function getEventSpeakerName(event: RunEvent): string {
+  if (event.agent === "supplier") {
+    return "Supplier";
+  }
+  if (event.agent === "manufacturer") {
+    return "Manufacturer";
+  }
+  if (event.agent === "retailer") {
+    return "Retailer";
+  }
+
+  return "System";
+}
+
+function describeActivityEvent(event: RunEvent, currency: string): string {
+  if (
+    event.event_type === "market_shock" &&
+    event.previous_market_price !== null &&
+    event.observed_market_price !== null
+  ) {
+    const changePercent = roundMoney(
+      ((event.observed_market_price - event.previous_market_price) / event.previous_market_price) *
+        100,
+    );
+    return `${event.shock_headline ?? event.note ?? "Market disruption detected."} ${formatCurrency(
+      event.previous_market_price,
+      currency,
+    )} to ${formatCurrency(event.observed_market_price, currency)} (${changePercent > 0 ? "+" : ""}${changePercent.toFixed(1)}%).`;
+  }
+
+  if (event.event_type === "agent_turn" && event.reasoning_summary) {
+    return event.reasoning_summary;
+  }
+
+  if (event.event_type === "offer_received") {
+    return event.note ?? "Received the counterparty offer and queued it for review.";
+  }
+
+  if (event.action === "review_state") {
+    return "Reviewing the negotiation state, prior offers, and pending message before deciding.";
+  }
+
+  if (event.action === "check_market_price") {
+    if (
+      event.previous_market_price !== null &&
+      event.observed_market_price !== null &&
+      event.shock_type
+    ) {
+      return (
+        event.shock_headline ??
+        `Market moved from ${formatCurrency(event.previous_market_price, currency)} to ${formatCurrency(
+          event.observed_market_price,
+          currency,
+        )}.`
+      );
+    }
+
+    return (
+      event.note ??
+      (event.observed_market_price !== null
+        ? `Checking market reference price at ${formatCurrency(event.observed_market_price, currency)}.`
+        : "Checking market reference price.")
+    );
+  }
+
+  return event.note ?? "Working through the current negotiation step.";
+}
+
+function buildRunLogText({
+  run,
+  messages,
+  events,
+  suspectedFailureType,
+  whereRunFailed,
+}: {
+  run: RunRecord;
+  messages: RunDetailResponse["conversation"] extends infer T
+    ? T extends Array<infer U>
+      ? U[]
+      : never
+    : never;
+  events: RunEvent[];
+  suspectedFailureType: string | null;
+  whereRunFailed:
+    | { phase?: string; round?: number; agent?: string; note?: string }
+    | undefined;
+}): string {
+  const header = [
+    `Run ID: ${run.id}`,
+    `Title: ${run.title}`,
+    `Status: ${run.status}`,
+    `Created: ${run.created_at}`,
+    `Updated: ${run.updated_at}`,
+    `Product: ${run.product_context.product_name}`,
+    `Market: ${run.product_context.market_region}`,
+    `Quantity: ${run.product_context.target_quantity}`,
+    `Baseline Price: ${formatCurrency(run.product_context.baseline_unit_price, run.product_context.currency)}`,
+    `Failure Type: ${suspectedFailureType ?? "none"}`,
+    `Failure Point: ${
+      whereRunFailed
+        ? `${whereRunFailed.phase ?? "n/a"} | round ${whereRunFailed.round ?? "n/a"} | ${whereRunFailed.agent ?? "n/a"}`
+        : "none"
+    }`,
+    "",
+    "Diagnosis",
+    `Outcome: ${run.diagnosis.outcome}`,
+    `Chain Effect: ${run.diagnosis.chain_effect}`,
+    `Key Risks: ${run.diagnosis.key_risks.join(" | ") || "none"}`,
+    `Key Signals: ${run.diagnosis.key_signals.join(" | ") || "none"}`,
+    `Next Actions: ${run.diagnosis.suggested_next_actions.join(" | ") || "none"}`,
+    "",
+    "Transcript",
+  ];
+
+  const transcriptLines = messages.length
+    ? messages.map(
+        (message) =>
+          `[${message.timestamp}] ${message.speaker_name} | ${message.phase} | round ${message.round} | ${message.kind} | ${
+            message.offer_price !== null
+              ? formatCurrency(message.offer_price, message.currency)
+              : "No price"
+          }\n${message.message}`,
+      )
+    : ["No transcript available."];
+
+  const eventLines = [
+    "",
+    "Event Log",
+    ...(events.length
+      ? events.map(
+          (event) =>
+            `[${event.timestamp}] ${event.event_type} | ${event.phase ?? "run"} | round ${
+              event.round ?? "n/a"
+            } | ${event.agent ?? "system"} | offer ${
+              event.offer_price !== null
+                ? formatCurrency(event.offer_price, run.product_context.currency)
+                : "n/a"
+            } | market ${
+              event.observed_market_price !== null
+                ? formatCurrency(event.observed_market_price, run.product_context.currency)
+                : "n/a"
+            }\n${event.note ?? "No additional note recorded."}${
+              event.reasoning_summary ? `\nReasoning: ${event.reasoning_summary}` : ""
+            }`,
+        )
+      : ["No event log available."]),
+  ];
+
+  return [...header, ...transcriptLines, ...eventLines].join("\n\n");
 }
 
 function buildBeliefComparison(samples: BeliefGapSample[]) {

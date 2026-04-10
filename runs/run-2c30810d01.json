@@ -1,0 +1,580 @@
+{
+  "id": "run-2c30810d01",
+  "title": "Tomato Harvest Pricing Run Seed 34-2",
+  "status": "failed",
+  "scenario": "Tomato Ketchup in California. Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation.",
+  "created_at": "2026-04-10T14:26:32.145435Z",
+  "updated_at": "2026-04-10T14:27:16.762357Z",
+  "product_context": {
+    "product_name": "Tomato Ketchup",
+    "product_category": "condiments",
+    "market_region": "California",
+    "baseline_unit_price": 2.37,
+    "target_quantity": 2113,
+    "currency": "USD",
+    "demand_signal": "Retail ketchup demand is steady, but wholesale buyers want price protection before peak tomato procurement.",
+    "supply_signal": "Tomato harvest yields are uneven across growing regions, putting pressure on paste input pricing."
+  },
+  "agents": [
+    {
+      "id": "supplier",
+      "name": "Supplier",
+      "role": "supplier",
+      "objective": "Sell above the supplier reservation price while keeping volume committed.",
+      "reservation_prices": {
+        "min_sell_price": 2.15,
+        "max_buy_price": null
+      }
+    },
+    {
+      "id": "manufacturer",
+      "name": "Manufacturer",
+      "role": "manufacturer",
+      "objective": "Buy below the procurement ceiling and preserve downstream margin.",
+      "reservation_prices": {
+        "min_sell_price": 2.79,
+        "max_buy_price": 2.52
+      }
+    },
+    {
+      "id": "retailer",
+      "name": "Retailer",
+      "role": "retailer",
+      "objective": "Buy enough units without exceeding the retail reservation price.",
+      "reservation_prices": {
+        "min_sell_price": null,
+        "max_buy_price": 3.07
+      }
+    }
+  ],
+  "phases": [
+    {
+      "name": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "order": 1,
+      "description": "The supplier negotiates an upstream unit price with the manufacturer."
+    },
+    {
+      "name": "manufacturer_retailer",
+      "label": "Manufacturer to Retailer",
+      "order": 2,
+      "description": "The manufacturer negotiates a downstream unit price with the retailer after the upstream deal sets its cost basis."
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 1,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "Thanks for opening the discussion. Based on current market conditions, I can start at 2.60 per unit for committed volume, which is in line with the latest pricing environment and gives us room to support a reliable supply arrangement. If your volume commitment is strong, I may be able to work on structure or minor movement from there.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.6,
+      "delivered_message": null,
+      "created_at": "2026-04-10T14:26:37.074250Z",
+      "tool_calls": [
+        {
+          "id": "tool-8773273a",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-fe27387b",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: none.",
+          "created_at": "2026-04-10T14:26:32.918197Z"
+        },
+        {
+          "id": "tool-07fd5bf1",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-2c30810d01",
+            "negotiation_id": "neg-fe27387b",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 2.51
+          },
+          "result_summary": "Observed market reference price: 2.51.",
+          "created_at": "2026-04-10T14:26:32.918167Z"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 1,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "Thanks for the opening proposal. That level is above where I can place business given the current market reference and the margin we need to preserve downstream, so I\u2019d need to be closer to 2.42 per unit to move this forward. If you can work toward that range on committed volume, we should have a practical basis to continue and I can help with a cleaner commitment structure.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.42,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.6,
+        "note": "Thanks for opening the discussion. Based on current market conditions, I can start at 2.60 per unit for committed volume, which is in line with the latest pricing environment and gives us room to support a reliable supply arrangement. If your volume commitment is strong, I may be able to work on structure or minor movement from there.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T14:26:41.096563Z",
+      "tool_calls": [
+        {
+          "id": "tool-56f63a71",
+          "step_index": 2,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-fe27387b",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: {'type': 'offer', 'price': 2.6, 'note': 'Thanks for opening the discussion. Based on current market conditions, I can start at 2.60 per unit for committed volume, which is in line with the latest pricing environment and gives us room to support a reliable supply arrangement. If your volume commitment is strong, I may be able to work on structure or minor movement from there.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T14:26:37.075074Z"
+        },
+        {
+          "id": "tool-c2f3c7b7",
+          "step_index": 2,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-2c30810d01",
+            "negotiation_id": "neg-fe27387b",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 2.38
+          },
+          "result_summary": "Observed market reference price: 2.38.",
+          "created_at": "2026-04-10T14:26:37.075060Z"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 2,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "I appreciate the clarity on your target, but 2.42 is still light relative to where the market is actually trading and where I can commit volume responsibly. The latest reference I\u2019m working from is around 2.55, so I can narrow from 2.60 to 2.52 per unit if we\u2019re talking real committed volume and a clean structure. If you can come up to this level, I think we can move toward a workable agreement without dragging this out.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.52,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.42,
+        "note": "Thanks for the opening proposal. That level is above where I can place business given the current market reference and the margin we need to preserve downstream, so I\u2019d need to be closer to 2.42 per unit to move this forward. If you can work toward that range on committed volume, we should have a practical basis to continue and I can help with a cleaner commitment structure.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T14:26:45.288825Z",
+      "tool_calls": [
+        {
+          "id": "tool-cdb428d2",
+          "step_index": 3,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-fe27387b",
+            "round_number": 2
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 2. Pending message: {'type': 'offer', 'price': 2.42, 'note': 'Thanks for the opening proposal. That level is above where I can place business given the current market reference and the margin we need to preserve downstream, so I\u2019d need to be closer to 2.42 per unit to move this forward. If you can work toward that range on committed volume, we should have a practical basis to continue and I can help with a cleaner commitment structure.', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T14:26:41.098881Z"
+        },
+        {
+          "id": "tool-21c0553a",
+          "step_index": 3,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-2c30810d01",
+            "negotiation_id": "neg-fe27387b",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 2.55
+          },
+          "result_summary": "Observed market reference price: 2.55.",
+          "created_at": "2026-04-10T14:26:41.098833Z"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 2,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I hear your point on wanting committed volume and a clean structure, but 2.52 is still above where I can make this work given the market reference I\u2019m seeing. The latest check on my side is 2.42, so I can move up from 2.42 to 2.46 per unit as a good-faith step to narrow the gap and keep this moving. If you have any flexibility around that level, we may be able to close this without spending another round circling the same spread.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.46,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.52,
+        "note": "I appreciate the clarity on your target, but 2.42 is still light relative to where the market is actually trading and where I can commit volume responsibly. The latest reference I\u2019m working from is around 2.55, so I can narrow from 2.60 to 2.52 per unit if we\u2019re talking real committed volume and a clean structure. If you can come up to this level, I think we can move toward a workable agreement without dragging this out.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T14:26:49.504425Z",
+      "tool_calls": [
+        {
+          "id": "tool-13402c18",
+          "step_index": 4,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-fe27387b",
+            "round_number": 2
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 2. Pending message: {'type': 'offer', 'price': 2.52, 'note': 'I appreciate the clarity on your target, but 2.42 is still light relative to where the market is actually trading and where I can commit volume responsibly. The latest reference I\u2019m working from is around 2.55, so I can narrow from 2.60 to 2.52 per unit if we\u2019re talking real committed volume and a clean structure. If you can come up to this level, I think we can move toward a workable agreement without dragging this out.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T14:26:45.290247Z"
+        },
+        {
+          "id": "tool-883c112a",
+          "step_index": 4,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-2c30810d01",
+            "negotiation_id": "neg-fe27387b",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 2.42
+          },
+          "result_summary": "Observed market reference price: 2.42.",
+          "created_at": "2026-04-10T14:26:45.290229Z"
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 3,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "I can\u2019t do 2.46 given where the market is actually trading on my side; the latest reference I\u2019m seeing is 2.59, so that level is too far below a reasonable committed-volume price. To keep this moving, I\u2019ll narrow from 2.52 to 2.50 per unit as a real concession and a cleaner midpoint. If you can meet me there, we should be able to wrap this up without another round of small increments.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.5,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.46,
+        "note": "I hear your point on wanting committed volume and a clean structure, but 2.52 is still above where I can make this work given the market reference I\u2019m seeing. The latest check on my side is 2.42, so I can move up from 2.42 to 2.46 per unit as a good-faith step to narrow the gap and keep this moving. If you have any flexibility around that level, we may be able to close this without spending another round circling the same spread.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T14:26:53.681901Z",
+      "tool_calls": [
+        {
+          "id": "tool-9c5d5066",
+          "step_index": 5,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-fe27387b",
+            "round_number": 3
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 3. Pending message: {'type': 'offer', 'price': 2.46, 'note': 'I hear your point on wanting committed volume and a clean structure, but 2.52 is still above where I can make this work given the market reference I\u2019m seeing. The latest check on my side is 2.42, so I can move up from 2.42 to 2.46 per unit as a good-faith step to narrow the gap and keep this moving. If you have any flexibility around that level, we may be able to close this without spending another round circling the same spread.', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T14:26:49.508159Z"
+        },
+        {
+          "id": "tool-8b68345d",
+          "step_index": 5,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-2c30810d01",
+            "negotiation_id": "neg-fe27387b",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 2.59
+          },
+          "result_summary": "Observed market reference price: 2.59.",
+          "created_at": "2026-04-10T14:26:49.508081Z"
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 3,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I appreciate the movement to 2.50, but that still sits above the latest market reference I\u2019m working from, which is 2.46. I can improve slightly from 2.46 to 2.47 per unit to show I\u2019m trying to close this rather than drag out small steps. If you can meet me at 2.47, we should be able to finalize this round.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.47,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.5,
+        "note": "I can\u2019t do 2.46 given where the market is actually trading on my side; the latest reference I\u2019m seeing is 2.59, so that level is too far below a reasonable committed-volume price. To keep this moving, I\u2019ll narrow from 2.52 to 2.50 per unit as a real concession and a cleaner midpoint. If you can meet me there, we should be able to wrap this up without another round of small increments.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T14:26:58.153552Z",
+      "tool_calls": [
+        {
+          "id": "tool-cc957f87",
+          "step_index": 6,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-fe27387b",
+            "round_number": 3
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 3. Pending message: {'type': 'offer', 'price': 2.5, 'note': 'I can\u2019t do 2.46 given where the market is actually trading on my side; the latest reference I\u2019m seeing is 2.59, so that level is too far below a reasonable committed-volume price. To keep this moving, I\u2019ll narrow from 2.52 to 2.50 per unit as a real concession and a cleaner midpoint. If you can meet me there, we should be able to wrap this up without another round of small increments.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T14:26:53.686066Z"
+        },
+        {
+          "id": "tool-4ccf0e36",
+          "step_index": 6,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-2c30810d01",
+            "negotiation_id": "neg-fe27387b",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 2.46
+          },
+          "result_summary": "Observed market reference price: 2.46.",
+          "created_at": "2026-04-10T14:26:53.686018Z"
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 4,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "Thanks for moving to 2.47. My latest market check is coming in at 2.51, so I can\u2019t justify dropping to your number when that reference supports a firmer level. To keep this moving and show some flexibility, I can come down from 2.50 to 2.49 per unit, and if you can meet me there, I\u2019m prepared to finalize this round.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.49,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.47,
+        "note": "I appreciate the movement to 2.50, but that still sits above the latest market reference I\u2019m working from, which is 2.46. I can improve slightly from 2.46 to 2.47 per unit to show I\u2019m trying to close this rather than drag out small steps. If you can meet me at 2.47, we should be able to finalize this round.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T14:27:03.121627Z",
+      "tool_calls": [
+        {
+          "id": "tool-c887b9df",
+          "step_index": 7,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-fe27387b",
+            "round_number": 4
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 4. Pending message: {'type': 'offer', 'price': 2.47, 'note': 'I appreciate the movement to 2.50, but that still sits above the latest market reference I\u2019m working from, which is 2.46. I can improve slightly from 2.46 to 2.47 per unit to show I\u2019m trying to close this rather than drag out small steps. If you can meet me at 2.47, we should be able to finalize this round.', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T14:26:58.154599Z"
+        },
+        {
+          "id": "tool-a8a042f0",
+          "step_index": 7,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-2c30810d01",
+            "negotiation_id": "neg-fe27387b",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 2.51
+          },
+          "result_summary": "Observed market reference price: 2.51.",
+          "created_at": "2026-04-10T14:26:58.154584Z"
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 4,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I appreciate the movement to 2.49, but my latest market check is materially lower at 2.38, so that level still looks rich from my side. I\u2019m willing to stay constructive and hold at 2.47 per unit to keep momentum and give us a realistic path to close this round. If you can meet me there, I\u2019m prepared to finalize promptly.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.47,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.49,
+        "note": "Thanks for moving to 2.47. My latest market check is coming in at 2.51, so I can\u2019t justify dropping to your number when that reference supports a firmer level. To keep this moving and show some flexibility, I can come down from 2.50 to 2.49 per unit, and if you can meet me there, I\u2019m prepared to finalize this round.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T14:27:07.309194Z",
+      "tool_calls": [
+        {
+          "id": "tool-dcd24a41",
+          "step_index": 8,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-fe27387b",
+            "round_number": 4
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 4. Pending message: {'type': 'offer', 'price': 2.49, 'note': 'Thanks for moving to 2.47. My latest market check is coming in at 2.51, so I can\u2019t justify dropping to your number when that reference supports a firmer level. To keep this moving and show some flexibility, I can come down from 2.50 to 2.49 per unit, and if you can meet me there, I\u2019m prepared to finalize this round.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T14:27:03.125282Z"
+        },
+        {
+          "id": "tool-0e4433c7",
+          "step_index": 8,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-2c30810d01",
+            "negotiation_id": "neg-fe27387b",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 2.38
+          },
+          "result_summary": "Observed market reference price: 2.38.",
+          "created_at": "2026-04-10T14:27:03.125237Z"
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 5,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "I can\u2019t justify moving down to 2.47 given the latest market reference on my side is 2.55, which supports the level I already put forward. I\u2019ve already narrowed this meaningfully to keep the volume on track, and 2.49 per unit is a fair closing point from my perspective. If you can meet me there, I\u2019m prepared to wrap this up now and keep execution straightforward.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.49,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.47,
+        "note": "I appreciate the movement to 2.49, but my latest market check is materially lower at 2.38, so that level still looks rich from my side. I\u2019m willing to stay constructive and hold at 2.47 per unit to keep momentum and give us a realistic path to close this round. If you can meet me there, I\u2019m prepared to finalize promptly.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T14:27:13.081857Z",
+      "tool_calls": [
+        {
+          "id": "tool-72b010fa",
+          "step_index": 9,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-fe27387b",
+            "round_number": 5
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 5. Pending message: {'type': 'offer', 'price': 2.47, 'note': 'I appreciate the movement to 2.49, but my latest market check is materially lower at 2.38, so that level still looks rich from my side. I\u2019m willing to stay constructive and hold at 2.47 per unit to keep momentum and give us a realistic path to close this round. If you can meet me there, I\u2019m prepared to finalize promptly.', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T14:27:07.310477Z"
+        },
+        {
+          "id": "tool-9e43aa74",
+          "step_index": 9,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-2c30810d01",
+            "negotiation_id": "neg-fe27387b",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 2.55
+          },
+          "result_summary": "Observed market reference price: 2.55.",
+          "created_at": "2026-04-10T14:27:07.310464Z"
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 5,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I\u2019m close to wrapping this up, but I can\u2019t ignore that the latest market reference I\u2019m working from is 2.42, which makes 2.49 a bit rich on my side. I\u2019m willing to narrow the gap one last step and come up to 2.48 per unit to keep the volume moving and avoid dragging this out. If you can meet me there, I\u2019m prepared to close now and move straight into execution.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.48,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.49,
+        "note": "I can\u2019t justify moving down to 2.47 given the latest market reference on my side is 2.55, which supports the level I already put forward. I\u2019ve already narrowed this meaningfully to keep the volume on track, and 2.49 per unit is a fair closing point from my perspective. If you can meet me there, I\u2019m prepared to wrap this up now and keep execution straightforward.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T14:27:16.751292Z",
+      "tool_calls": [
+        {
+          "id": "tool-67fe3f06",
+          "step_index": 10,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-fe27387b",
+            "round_number": 5
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 5. Pending message: {'type': 'offer', 'price': 2.49, 'note': 'I can\u2019t justify moving down to 2.47 given the latest market reference on my side is 2.55, which supports the level I already put forward. I\u2019ve already narrowed this meaningfully to keep the volume on track, and 2.49 per unit is a fair closing point from my perspective. If you can meet me there, I\u2019m prepared to wrap this up now and keep execution straightforward.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T14:27:13.086083Z"
+        },
+        {
+          "id": "tool-4d395de5",
+          "step_index": 10,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-2c30810d01",
+            "negotiation_id": "neg-fe27387b",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 2.42
+          },
+          "result_summary": "Observed market reference price: 2.42.",
+          "created_at": "2026-04-10T14:27:13.086047Z"
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-fe27387b",
+      "round_number": 5,
+      "agent_id": "manufacturer",
+      "kind": "timeout",
+      "message": "Supplier to Manufacturer reached the turn limit without agreement.",
+      "outcome": "Negotiation times out.",
+      "proposed_price": null,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.48,
+        "note": "I\u2019m close to wrapping this up, but I can\u2019t ignore that the latest market reference I\u2019m working from is 2.42, which makes 2.49 a bit rich on my side. I\u2019m willing to narrow the gap one last step and come up to 2.48 per unit to keep the volume moving and avoid dragging this out. If you can meet me there, I\u2019m prepared to close now and move straight into execution.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T14:27:16.755465Z",
+      "tool_calls": []
+    }
+  ],
+  "negotiations": [
+    {
+      "id": "neg-fe27387b",
+      "phase": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "seller_agent_id": "supplier",
+      "buyer_agent_id": "manufacturer",
+      "status": "timeout",
+      "max_rounds": 5,
+      "quantity": 2113,
+      "rounds_completed": 5,
+      "opening_seller_offer": 2.6,
+      "opening_buyer_offer": 2.42,
+      "final_price": null,
+      "outcome_summary": "Supplier to Manufacturer reached the turn limit without agreement.",
+      "dependency_note": "Initial upstream procurement negotiation."
+    }
+  ],
+  "diagnosis": {
+    "outcome": "Upstream deal timeout. Downstream negotiation did not run because the upstream deal did not close.",
+    "chain_effect": "The upstream deal did not establish a downstream cost basis, so phase two was skipped.",
+    "key_risks": [
+      "A costly upstream agreement compresses downstream negotiating room.",
+      "Turn limits can force timeouts even when the gap is narrowing."
+    ],
+    "key_signals": [
+      "Supplier-manufacturer status: timeout.",
+      "Manufacturer-retailer status: not run."
+    ],
+    "suggested_next_actions": [
+      "Tune reservation prices and turn limits to test sensitivity.",
+      "Add richer quantity or margin tradeoffs before introducing LLM behavior."
+    ]
+  },
+  "max_rounds_per_negotiation": 5,
+  "notes": "Backend simulation with linked upstream and downstream negotiations.",
+  "tags": [
+    "simulation",
+    "supply-chain"
+  ]
+}

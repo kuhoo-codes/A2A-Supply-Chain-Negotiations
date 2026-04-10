@@ -591,3 +591,44 @@ Run Simulation
 Assistant: Moved the runs-page seed form to the right side of the top launch card while keeping the mobile layout stacked.
 
 User: append all chat history to codex_log.txt
+
+Assistant: Appended the latest session history to `codex_log.txt`.
+
+User: why are my agents talking such shortly do i have any limitations?
+
+Assistant: Explained that the short agent dialogue came mostly from explicit backend prompt instructions like `Keep note short`, the small round budget, and the UI only rendering the short message field.
+
+User: yes please
+
+Assistant: Changed the negotiation prompt to ask for natural multi-sentence dialogue, combined `note` and `reason` into richer displayed messages, and expanded tomato-harvest round counts slightly.
+
+User: have i constricted the agents to accept the offer no matter what. I want to be realistic, sometimes negotitaions fall through
+
+Assistant: Confirmed that the engine already allowed accept, reject, and timeout outcomes, but noted that monotonic seller-down / buyer-up price bounding biased runs toward convergence.
+
+User: i do not want to restrict agents at all
+
+Assistant: Removed the automatic non-overlap rejection and the hard monotonic price clamping so the model was no longer mechanically pushed toward agreement.
+
+User: these are my assignment details, i need to adhere to them strongly : Prove Engineering Take Home: Supply Chain Negotiation
+
+Assistant: Advised that the assignment still requires hidden reservation prices and structured negotiation protocol, so the right design is agent autonomy under hidden constraints rather than unconstrained behavior.
+
+User: yes
+
+Assistant: Refactored the backend so reservation prices remain private internal context, removed forced convergence, and added explicit trace diagnostics when agents act against their own hidden thresholds.
+
+User: so am i restricting agents now?
+
+Assistant: Clarified that the system still has necessary protocol constraints and private reservation-price context, but no longer forces agreement or monotonic concessions.
+
+User: I have a multi-agent negotiation simulation where AI agents (e.g. Supplier, 
+  Manufacturer, Retailer) negotiate prices sequentially in a supply chain. I want to add a
+   Market Shock feature that lets a human operator inject a mid-negotiation market 
+  disruption (price spike, supply shortage, geopolitical event, etc.) while a run is in   
+  progress.
+
+Assistant: Implemented queued market shocks end to end: backend shock registry and `/runs/{run_id}/shock` plus `/runs/{run_id}/events`, market-tool shock consumption with `market_shock` events, forced agent awareness before the next LLM turn, Next proxy routes, SSE subscription, operator shock controls in the run detail sidebar, and full-width breaking-news banners in the chat feed.
+
+User: I need you to append  our chat logs to a
+  codex_log.txt file

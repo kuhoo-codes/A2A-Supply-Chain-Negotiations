@@ -1,0 +1,580 @@
+{
+  "id": "run-945486474c",
+  "title": "Tomato Harvest Pricing Run Seed 42-2",
+  "status": "failed",
+  "scenario": "Tomato Ketchup in Ontario. Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation.",
+  "created_at": "2026-04-10T14:21:57.479526Z",
+  "updated_at": "2026-04-10T14:22:43.109061Z",
+  "product_context": {
+    "product_name": "Tomato Ketchup",
+    "product_category": "condiments",
+    "market_region": "Ontario",
+    "baseline_unit_price": 2.57,
+    "target_quantity": 1889,
+    "currency": "USD",
+    "demand_signal": "Retail ketchup demand is steady, but wholesale buyers want price protection before peak tomato procurement.",
+    "supply_signal": "Tomato harvest yields are uneven across growing regions, putting pressure on paste input pricing."
+  },
+  "agents": [
+    {
+      "id": "supplier",
+      "name": "Supplier",
+      "role": "supplier",
+      "objective": "Sell above the supplier reservation price while keeping volume committed.",
+      "reservation_prices": {
+        "min_sell_price": 2.22,
+        "max_buy_price": null
+      }
+    },
+    {
+      "id": "manufacturer",
+      "name": "Manufacturer",
+      "role": "manufacturer",
+      "objective": "Buy below the procurement ceiling and preserve downstream margin.",
+      "reservation_prices": {
+        "min_sell_price": 2.83,
+        "max_buy_price": 2.54
+      }
+    },
+    {
+      "id": "retailer",
+      "name": "Retailer",
+      "role": "retailer",
+      "objective": "Buy enough units without exceeding the retail reservation price.",
+      "reservation_prices": {
+        "min_sell_price": null,
+        "max_buy_price": 3.2
+      }
+    }
+  ],
+  "phases": [
+    {
+      "name": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "order": 1,
+      "description": "The supplier negotiates an upstream unit price with the manufacturer."
+    },
+    {
+      "name": "manufacturer_retailer",
+      "label": "Manufacturer to Retailer",
+      "order": 2,
+      "description": "The manufacturer negotiates a downstream unit price with the retailer after the upstream deal sets its cost basis."
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 1,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "Thanks for starting the discussion. Based on current market conditions, I can open at 6.70 per unit for the committed volume, which is in line with where supply is trading and gives you dependable coverage. If you have flexibility on volume or scheduling, I may be able to sharpen the pricing somewhat as we work through the details.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 6.7,
+      "delivered_message": null,
+      "created_at": "2026-04-10T14:22:02.755953Z",
+      "tool_calls": [
+        {
+          "id": "tool-37f8baf6",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-58c50540",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: none.",
+          "created_at": "2026-04-10T14:21:58.352700Z"
+        },
+        {
+          "id": "tool-fdb2e5b7",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-945486474c",
+            "negotiation_id": "neg-58c50540",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 6.38
+          },
+          "result_summary": "Observed market reference price: 6.38.",
+          "created_at": "2026-04-10T14:21:58.352691Z"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 1,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I appreciate the opening, but 6.70 is well above where this program can work on our side. To get the conversation moving, I can put forward 2.30 per unit for the committed volume, with the understanding that firmer scheduling and clean release timing would help keep execution straightforward. If there's room to move materially from your opening, we can keep working toward something practical.",
+      "outcome": "Offer queued for delivery on the next turn. Reservation-price violation: Manufacturer offered 2.30, below its hidden seller floor of 2.83.",
+      "proposed_price": 2.3,
+      "delivered_message": {
+        "type": "offer",
+        "price": 6.7,
+        "note": "Thanks for starting the discussion. Based on current market conditions, I can open at 6.70 per unit for the committed volume, which is in line with where supply is trading and gives you dependable coverage. If you have flexibility on volume or scheduling, I may be able to sharpen the pricing somewhat as we work through the details.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T14:22:06.939680Z",
+      "tool_calls": [
+        {
+          "id": "tool-7b2260ab",
+          "step_index": 2,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-58c50540",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: {'type': 'offer', 'price': 6.7, 'note': 'Thanks for starting the discussion. Based on current market conditions, I can open at 6.70 per unit for the committed volume, which is in line with where supply is trading and gives you dependable coverage. If you have flexibility on volume or scheduling, I may be able to sharpen the pricing somewhat as we work through the details.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T14:22:02.774188Z"
+        },
+        {
+          "id": "tool-290ad699",
+          "step_index": 2,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-945486474c",
+            "negotiation_id": "neg-58c50540",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 7.45
+          },
+          "result_summary": "Observed market reference price: 7.45.",
+          "created_at": "2026-04-10T14:22:02.774094Z"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 2,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "Thanks for putting a number on the table. At 2.30, we're well below a workable level for this supply, especially against current market conditions, but I do want to keep the discussion moving. If you're prepared to commit the stated volume with firm scheduling and clean releases, I can move materially from my opening to 5.95 per unit as a serious next step.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 5.95,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.3,
+        "note": "I appreciate the opening, but 6.70 is well above where this program can work on our side. To get the conversation moving, I can put forward 2.30 per unit for the committed volume, with the understanding that firmer scheduling and clean release timing would help keep execution straightforward. If there's room to move materially from your opening, we can keep working toward something practical.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T14:22:10.563317Z",
+      "tool_calls": [
+        {
+          "id": "tool-13703880",
+          "step_index": 3,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-58c50540",
+            "round_number": 2
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 2. Pending message: {'type': 'offer', 'price': 2.3, 'note': \"I appreciate the opening, but 6.70 is well above where this program can work on our side. To get the conversation moving, I can put forward 2.30 per unit for the committed volume, with the understanding that firmer scheduling and clean release timing would help keep execution straightforward. If there's room to move materially from your opening, we can keep working toward something practical.\", 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T14:22:06.941219Z"
+        },
+        {
+          "id": "tool-6e4ae207",
+          "step_index": 3,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-945486474c",
+            "negotiation_id": "neg-58c50540",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 11.1
+          },
+          "result_summary": "Observed market reference price: 11.10.",
+          "created_at": "2026-04-10T14:22:06.941198Z"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 2,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I appreciate the movement, but 5.95 is still far outside a range that works for our finished-goods economics. We can improve from our 2.30 and put 2.44 per unit on the table if you can support the stated volume with reliable scheduling and clean releases. That reflects a real concession on our side to keep momentum, but we would need a substantially sharper number than your last offer to make this viable.",
+      "outcome": "Offer queued for delivery on the next turn. Reservation-price violation: Manufacturer offered 2.44, below its hidden seller floor of 2.83.",
+      "proposed_price": 2.44,
+      "delivered_message": {
+        "type": "offer",
+        "price": 5.95,
+        "note": "Thanks for putting a number on the table. At 2.30, we're well below a workable level for this supply, especially against current market conditions, but I do want to keep the discussion moving. If you're prepared to commit the stated volume with firm scheduling and clean releases, I can move materially from my opening to 5.95 per unit as a serious next step.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T14:22:14.888150Z",
+      "tool_calls": [
+        {
+          "id": "tool-6df51170",
+          "step_index": 4,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-58c50540",
+            "round_number": 2
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 2. Pending message: {'type': 'offer', 'price': 5.95, 'note': \"Thanks for putting a number on the table. At 2.30, we're well below a workable level for this supply, especially against current market conditions, but I do want to keep the discussion moving. If you're prepared to commit the stated volume with firm scheduling and clean releases, I can move materially from my opening to 5.95 per unit as a serious next step.\", 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T14:22:10.565872Z"
+        },
+        {
+          "id": "tool-2d983d6a",
+          "step_index": 4,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-945486474c",
+            "negotiation_id": "neg-58c50540",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 7.1
+          },
+          "result_summary": "Observed market reference price: 7.10.",
+          "created_at": "2026-04-10T14:22:10.565829Z"
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 3,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "I appreciate the movement to 2.44, but that level is still well below a workable supply position for us given production and fulfillment commitments. To keep this moving, I can make a meaningful concession from 5.95 and come down to 5.20 per unit if the stated volume is firm and scheduling remains reliable. That narrows the gap substantially on our side and reflects real movement, but we would need pricing in this range to support the program responsibly.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 5.2,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.44,
+        "note": "I appreciate the movement, but 5.95 is still far outside a range that works for our finished-goods economics. We can improve from our 2.30 and put 2.44 per unit on the table if you can support the stated volume with reliable scheduling and clean releases. That reflects a real concession on our side to keep momentum, but we would need a substantially sharper number than your last offer to make this viable.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T14:22:19.155489Z",
+      "tool_calls": [
+        {
+          "id": "tool-23fc78c4",
+          "step_index": 5,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-58c50540",
+            "round_number": 3
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 3. Pending message: {'type': 'offer', 'price': 2.44, 'note': 'I appreciate the movement, but 5.95 is still far outside a range that works for our finished-goods economics. We can improve from our 2.30 and put 2.44 per unit on the table if you can support the stated volume with reliable scheduling and clean releases. That reflects a real concession on our side to keep momentum, but we would need a substantially sharper number than your last offer to make this viable.', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T14:22:14.895387Z"
+        },
+        {
+          "id": "tool-b419c6da",
+          "step_index": 5,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-945486474c",
+            "negotiation_id": "neg-58c50540",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 10.75
+          },
+          "result_summary": "Observed market reference price: 10.75.",
+          "created_at": "2026-04-10T14:22:14.895344Z"
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 3,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "Thanks for the movement from 5.95 to 5.20. That is still far outside a level we can carry and preserve a workable program on our side, but I want to keep this moving and show some flexibility from 2.44. If volume is firm and execution stays clean, I can improve to 2.50 per unit as a serious next step; if you have room to close the gap materially from your side, we may be able to find a workable structure.",
+      "outcome": "Offer queued for delivery on the next turn. Reservation-price violation: Manufacturer offered 2.50, below its hidden seller floor of 2.83.",
+      "proposed_price": 2.5,
+      "delivered_message": {
+        "type": "offer",
+        "price": 5.2,
+        "note": "I appreciate the movement to 2.44, but that level is still well below a workable supply position for us given production and fulfillment commitments. To keep this moving, I can make a meaningful concession from 5.95 and come down to 5.20 per unit if the stated volume is firm and scheduling remains reliable. That narrows the gap substantially on our side and reflects real movement, but we would need pricing in this range to support the program responsibly.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T14:22:23.812196Z",
+      "tool_calls": [
+        {
+          "id": "tool-a34d588a",
+          "step_index": 6,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-58c50540",
+            "round_number": 3
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 3. Pending message: {'type': 'offer', 'price': 5.2, 'note': 'I appreciate the movement to 2.44, but that level is still well below a workable supply position for us given production and fulfillment commitments. To keep this moving, I can make a meaningful concession from 5.95 and come down to 5.20 per unit if the stated volume is firm and scheduling remains reliable. That narrows the gap substantially on our side and reflects real movement, but we would need pricing in this range to support the program responsibly.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T14:22:19.156888Z"
+        },
+        {
+          "id": "tool-d0744033",
+          "step_index": 6,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-945486474c",
+            "negotiation_id": "neg-58c50540",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 6.75
+          },
+          "result_summary": "Observed market reference price: 6.75.",
+          "created_at": "2026-04-10T14:22:19.156870Z"
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 4,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "I appreciate the movement to 2.50 and the signal that you want to keep the program alive, but that level is still too far below where we can commit supply responsibly. Given the remaining gap and the need to land this within the limited rounds left, I can make a meaningful concession to 4.60 per unit if volume is committed and execution remains straightforward. That is a substantial move from 5.20 on our side and reflects a serious effort to narrow this toward a workable close.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 4.6,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.5,
+        "note": "Thanks for the movement from 5.95 to 5.20. That is still far outside a level we can carry and preserve a workable program on our side, but I want to keep this moving and show some flexibility from 2.44. If volume is firm and execution stays clean, I can improve to 2.50 per unit as a serious next step; if you have room to close the gap materially from your side, we may be able to find a workable structure.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T14:22:28.613288Z",
+      "tool_calls": [
+        {
+          "id": "tool-66a8d438",
+          "step_index": 7,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-58c50540",
+            "round_number": 4
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 4. Pending message: {'type': 'offer', 'price': 2.5, 'note': 'Thanks for the movement from 5.95 to 5.20. That is still far outside a level we can carry and preserve a workable program on our side, but I want to keep this moving and show some flexibility from 2.44. If volume is firm and execution stays clean, I can improve to 2.50 per unit as a serious next step; if you have room to close the gap materially from your side, we may be able to find a workable structure.', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T14:22:23.815451Z"
+        },
+        {
+          "id": "tool-391c3043",
+          "step_index": 7,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-945486474c",
+            "negotiation_id": "neg-58c50540",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 10.4
+          },
+          "result_summary": "Observed market reference price: 10.40.",
+          "created_at": "2026-04-10T14:22:23.815401Z"
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 4,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "Thank you for the concession from 5.20 to 4.60; I recognize that as a real move. That said, 4.60 is still well outside the economics we can support on this program, especially with the margin we need to preserve downstream. To keep this moving in the limited time left, I can improve to 2.70 per unit if we can align on committed volume and clean execution. This is a meaningful step from our prior 2.50 and is intended as a serious attempt to narrow the gap toward something executable.",
+      "outcome": "Offer queued for delivery on the next turn. Reservation-price violation: Manufacturer offered 2.70, below its hidden seller floor of 2.83.",
+      "proposed_price": 2.7,
+      "delivered_message": {
+        "type": "offer",
+        "price": 4.6,
+        "note": "I appreciate the movement to 2.50 and the signal that you want to keep the program alive, but that level is still too far below where we can commit supply responsibly. Given the remaining gap and the need to land this within the limited rounds left, I can make a meaningful concession to 4.60 per unit if volume is committed and execution remains straightforward. That is a substantial move from 5.20 on our side and reflects a serious effort to narrow this toward a workable close.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T14:22:32.801569Z",
+      "tool_calls": [
+        {
+          "id": "tool-4a44399e",
+          "step_index": 8,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-58c50540",
+            "round_number": 4
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 4. Pending message: {'type': 'offer', 'price': 4.6, 'note': 'I appreciate the movement to 2.50 and the signal that you want to keep the program alive, but that level is still too far below where we can commit supply responsibly. Given the remaining gap and the need to land this within the limited rounds left, I can make a meaningful concession to 4.60 per unit if volume is committed and execution remains straightforward. That is a substantial move from 5.20 on our side and reflects a serious effort to narrow this toward a workable close.', 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T14:22:28.616814Z"
+        },
+        {
+          "id": "tool-ce925de8",
+          "step_index": 8,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-945486474c",
+            "negotiation_id": "neg-58c50540",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 6.55
+          },
+          "result_summary": "Observed market reference price: 6.55.",
+          "created_at": "2026-04-10T14:22:28.616768Z"
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 5,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "I appreciate the move to 2.70 and the signal that you're trying to close the gap, but that level is still too far from a workable supply position on our side. Given the late stage and the need to land this with committed volume and clean execution, I can make a final meaningful concession to 4.15 per unit. That reflects a substantial reduction from 4.60 while still recognizing the value in the program and prevailing market conditions, and it gives us a realistic path to agreement if you're prepared to tighten your side as well.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 4.15,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.7,
+        "note": "Thank you for the concession from 5.20 to 4.60; I recognize that as a real move. That said, 4.60 is still well outside the economics we can support on this program, especially with the margin we need to preserve downstream. To keep this moving in the limited time left, I can improve to 2.70 per unit if we can align on committed volume and clean execution. This is a meaningful step from our prior 2.50 and is intended as a serious attempt to narrow the gap toward something executable.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T14:22:37.532677Z",
+      "tool_calls": [
+        {
+          "id": "tool-85ddf30a",
+          "step_index": 9,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-58c50540",
+            "round_number": 5
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 5. Pending message: {'type': 'offer', 'price': 2.7, 'note': 'Thank you for the concession from 5.20 to 4.60; I recognize that as a real move. That said, 4.60 is still well outside the economics we can support on this program, especially with the margin we need to preserve downstream. To keep this moving in the limited time left, I can improve to 2.70 per unit if we can align on committed volume and clean execution. This is a meaningful step from our prior 2.50 and is intended as a serious attempt to narrow the gap toward something executable.', 'from_agent_id': 'manufacturer'}.",
+          "created_at": "2026-04-10T14:22:32.803373Z"
+        },
+        {
+          "id": "tool-4433868d",
+          "step_index": 9,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-945486474c",
+            "negotiation_id": "neg-58c50540",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 10.2
+          },
+          "result_summary": "Observed market reference price: 10.20.",
+          "created_at": "2026-04-10T14:22:32.803353Z"
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 5,
+      "agent_id": "manufacturer",
+      "kind": "offer",
+      "message": "I appreciate the movement, but 4.15 is still well outside what we can responsibly put into this program on our side. We are at the end of the process, so I\u2019m putting forward 2.83 per unit as our best and final position to try to get this done now. That gives some recognition to your push for higher pricing while still preserving a workable structure for us if we move quickly to close.",
+      "outcome": "Offer queued for delivery on the next turn. Reservation-price violation: Manufacturer offered 2.83, above its hidden buyer ceiling of 2.54.",
+      "proposed_price": 2.83,
+      "delivered_message": {
+        "type": "offer",
+        "price": 4.15,
+        "note": "I appreciate the move to 2.70 and the signal that you're trying to close the gap, but that level is still too far from a workable supply position on our side. Given the late stage and the need to land this with committed volume and clean execution, I can make a final meaningful concession to 4.15 per unit. That reflects a substantial reduction from 4.60 while still recognizing the value in the program and prevailing market conditions, and it gives us a realistic path to agreement if you're prepared to tighten your side as well.",
+        "from_agent_id": "supplier"
+      },
+      "created_at": "2026-04-10T14:22:43.104203Z",
+      "tool_calls": [
+        {
+          "id": "tool-3c5a6e0d",
+          "step_index": 10,
+          "agent_id": "manufacturer",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-58c50540",
+            "round_number": 5
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 5. Pending message: {'type': 'offer', 'price': 4.15, 'note': \"I appreciate the move to 2.70 and the signal that you're trying to close the gap, but that level is still too far from a workable supply position on our side. Given the late stage and the need to land this with committed volume and clean execution, I can make a final meaningful concession to 4.15 per unit. That reflects a substantial reduction from 4.60 while still recognizing the value in the program and prevailing market conditions, and it gives us a realistic path to agreement if you're prepared to tighten your side as well.\", 'from_agent_id': 'supplier'}.",
+          "created_at": "2026-04-10T14:22:37.536434Z"
+        },
+        {
+          "id": "tool-1c0ebea7",
+          "step_index": 10,
+          "agent_id": "manufacturer",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "run_id": "run-945486474c",
+            "negotiation_id": "neg-58c50540",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 6.5
+          },
+          "result_summary": "Observed market reference price: 6.50.",
+          "created_at": "2026-04-10T14:22:37.536387Z"
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-58c50540",
+      "round_number": 5,
+      "agent_id": "manufacturer",
+      "kind": "timeout",
+      "message": "Supplier to Manufacturer reached the turn limit without agreement.",
+      "outcome": "Negotiation times out.",
+      "proposed_price": null,
+      "delivered_message": {
+        "type": "offer",
+        "price": 2.83,
+        "note": "I appreciate the movement, but 4.15 is still well outside what we can responsibly put into this program on our side. We are at the end of the process, so I\u2019m putting forward 2.83 per unit as our best and final position to try to get this done now. That gives some recognition to your push for higher pricing while still preserving a workable structure for us if we move quickly to close.",
+        "from_agent_id": "manufacturer"
+      },
+      "created_at": "2026-04-10T14:22:43.106197Z",
+      "tool_calls": []
+    }
+  ],
+  "negotiations": [
+    {
+      "id": "neg-58c50540",
+      "phase": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "seller_agent_id": "supplier",
+      "buyer_agent_id": "manufacturer",
+      "status": "timeout",
+      "max_rounds": 5,
+      "quantity": 1889,
+      "rounds_completed": 5,
+      "opening_seller_offer": 6.7,
+      "opening_buyer_offer": 2.3,
+      "final_price": null,
+      "outcome_summary": "Supplier to Manufacturer reached the turn limit without agreement.",
+      "dependency_note": "Initial upstream procurement negotiation."
+    }
+  ],
+  "diagnosis": {
+    "outcome": "Upstream deal timeout. Downstream negotiation did not run because the upstream deal did not close.",
+    "chain_effect": "The upstream deal did not establish a downstream cost basis, so phase two was skipped.",
+    "key_risks": [
+      "A costly upstream agreement compresses downstream negotiating room.",
+      "Turn limits can force timeouts even when the gap is narrowing."
+    ],
+    "key_signals": [
+      "Supplier-manufacturer status: timeout.",
+      "Manufacturer-retailer status: not run."
+    ],
+    "suggested_next_actions": [
+      "Tune reservation prices and turn limits to test sensitivity.",
+      "Add richer quantity or margin tradeoffs before introducing LLM behavior."
+    ]
+  },
+  "max_rounds_per_negotiation": 5,
+  "notes": "Backend simulation with linked upstream and downstream negotiations.",
+  "tags": [
+    "simulation",
+    "supply-chain"
+  ]
+}
