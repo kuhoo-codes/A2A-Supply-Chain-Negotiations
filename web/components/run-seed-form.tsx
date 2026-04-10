@@ -1,0 +1,96 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+
+
+type RunSeedFormProps = {
+  mode?: "refresh" | "redirect";
+};
+
+
+export function RunSeedForm({ mode = "refresh" }: RunSeedFormProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [seed, setSeed] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/simulation/run", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ seed: Number(seed) }),
+      });
+
+      const payload = (await response.json()) as {
+        data: { count: number } | null;
+        error: string | null;
+      };
+
+      if (!response.ok || !payload.data) {
+        console.error("Simulation failed:", payload.error ?? "Unknown simulation error");
+        setError(payload.error ?? "Simulation could not be completed.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      setSuccess(`${payload.data.count} simulations created.`);
+      startTransition(() => {
+        if (mode === "redirect") {
+          router.push("/runs");
+          return;
+        }
+
+        router.refresh();
+      });
+    } catch {
+      console.error("Simulation request failed");
+      setError("Unable to reach the backend simulation endpoint.");
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="seed-form" onSubmit={handleSubmit}>
+      <div className="seed-form-row">
+        <label className="field">
+          <span>Random Seed</span>
+          <input
+            inputMode="numeric"
+            onChange={(event) => setSeed(event.target.value)}
+            placeholder="e.g. 42"
+            value={seed}
+          />
+        </label>
+        <button
+          className="button primary"
+          disabled={isSubmitting || isPending || !seed}
+          type="submit"
+        >
+          {isSubmitting || isPending ? "Running Simulations..." : "Run Simulation"}
+        </button>
+      </div>
+
+      {isSubmitting || isPending ? (
+        <div className="progress-shell" aria-live="polite">
+          <div className="progress-bar" />
+        </div>
+      ) : null}
+
+      {error ? (
+        <p className="inline-error">{error}</p>
+      ) : null}
+      {success ? <p className="inline-success">{success}</p> : null}
+    </form>
+  );
+}

@@ -39,10 +39,39 @@ class OpenAIClientWrapper:
             if not output_text:
                 raise OpenAIDecisionError("OpenAI returned an empty decision response.")
 
-            return json.loads(output_text)
+            return _parse_json_response(output_text)
         except OpenAIDecisionError:
             raise
         except json.JSONDecodeError as exc:
             raise OpenAIDecisionError("OpenAI returned invalid JSON.") from exc
         except Exception as exc:
-            raise OpenAIDecisionError("OpenAI decision call failed.") from exc
+            detail = str(exc).strip() or exc.__class__.__name__
+            raise OpenAIDecisionError(
+                f"OpenAI decision call failed: {detail}"
+            ) from exc
+
+
+def _parse_json_response(output_text: str) -> dict:
+    cleaned_output = output_text.strip()
+    if not cleaned_output:
+        raise OpenAIDecisionError("OpenAI returned an empty decision response.")
+
+    try:
+        return json.loads(cleaned_output)
+    except json.JSONDecodeError:
+        pass
+
+    if cleaned_output.startswith("```"):
+        lines = cleaned_output.splitlines()
+        if len(lines) >= 3 and lines[-1].strip() == "```":
+            fenced_payload = "\n".join(lines[1:-1]).strip()
+            if fenced_payload.lower().startswith("json"):
+                fenced_payload = fenced_payload[4:].strip()
+            return json.loads(fenced_payload)
+
+    first_brace = cleaned_output.find("{")
+    last_brace = cleaned_output.rfind("}")
+    if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
+        return json.loads(cleaned_output[first_brace : last_brace + 1])
+
+    raise OpenAIDecisionError("OpenAI returned invalid JSON.")

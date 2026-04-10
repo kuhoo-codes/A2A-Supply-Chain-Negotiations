@@ -7,6 +7,10 @@ export function formatDateTime(value: string): string {
 
 
 export function formatLabel(value: string): string {
+  if (value === "supplier") {
+    return "Seller";
+  }
+
   return value
     .split("-")
     .join(" ")

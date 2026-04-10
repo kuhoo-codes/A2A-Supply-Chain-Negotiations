@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { getApiBaseUrl } from "../../../../lib/api";
-import { RunRecord } from "../../../../lib/api-types";
-import { SimulationRunRequest } from "../../../../lib/simulation-types";
+import { SimulationBatchResult, SimulationSeedRequest } from "../../../../lib/api-types";
 
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as SimulationRunRequest;
+    const body = (await request.json()) as SimulationSeedRequest;
     const response = await fetch(`${getApiBaseUrl()}/simulation/run`, {
       method: "POST",
       headers: {
@@ -32,7 +31,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const data = (await response.json()) as RunRecord;
+    const data = (await response.json()) as SimulationBatchResult;
     return NextResponse.json({ data, error: null });
   } catch {
     return NextResponse.json(

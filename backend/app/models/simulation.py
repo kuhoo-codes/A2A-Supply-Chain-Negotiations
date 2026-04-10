@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from backend.app.models.run import RunRecord
+
 
 class PipelineDependencyStatus(BaseModel):
     configured: bool
@@ -23,3 +25,9 @@ class SimulationTestPipelineResult(BaseModel):
     openai: PipelineDependencyStatus
     langfuse: PipelineDependencyStatus
     events: list[str] = Field(default_factory=list)
+
+
+class SimulationBatchResult(BaseModel):
+    seed: int
+    count: int
+    runs: list[RunRecord]

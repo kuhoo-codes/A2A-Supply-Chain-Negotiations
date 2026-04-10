@@ -1,7 +1,11 @@
 from pydantic import BaseModel, Field
 
 
-class SimulationRunRequest(BaseModel):
+class SimulationSeedRequest(BaseModel):
+    seed: int = Field(..., ge=0)
+
+
+class SimulationRunConfig(BaseModel):
     title: str = Field(..., min_length=1)
     product_name: str = Field(..., min_length=1)
     product_category: str = Field(..., min_length=1)

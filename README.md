@@ -9,7 +9,7 @@ Minimal monorepo scaffold for a multi-step negotiation simulator with:
 - `shared`: shared docs or future schemas
 - `docs`: project notes
 
-The backend now runs the negotiation flow through the OpenAI decision step. If the LLM decision call fails, the run fails cleanly and no fallback simulation data is generated.
+The backend now runs tomato-ketchup negotiation batches through the OpenAI decision step. One seed creates three different seller, manufacturer, and retailer simulations. If the LLM decision call fails, the run fails cleanly and no fallback simulation data is generated.
 
 ## Structure
 
@@ -91,7 +91,6 @@ Useful backend endpoints:
 - `GET http://localhost:8000/health`
 - `GET http://localhost:8000/runs`
 - `GET http://localhost:8000/runs/{id}`
-- `POST http://localhost:8000/runs/simulate`
 - `POST http://localhost:8000/simulation/run`
 - `POST http://localhost:8000/simulation/test-pipeline`
 - `http://localhost:8000/docs`
@@ -130,20 +129,23 @@ Useful frontend pages:
 From the frontend:
 
 1. Open `http://localhost:3000/` or `http://localhost:3000/runs`
-2. Fill in the simulation inputs
-3. Click `Run New Simulation`
-4. Wait for redirect or refresh
-5. Open the generated run detail page from the runs list
+2. Enter a random seed
+3. Click `Run Simulation`
+4. The app creates three tomato-ketchup simulations and refreshes the runs list
+5. Open any generated run detail page from the runs list
 
 From the backend directly:
 
 ```bash
-curl -X POST http://localhost:8000/simulation/run
+curl -X POST http://localhost:8000/simulation/run \
+  -H "Content-Type: application/json" \
+  -d '{"seed": 42}'
 ```
 
 What gets saved:
 
-- a run JSON record in `runs/`
+- three run JSON records in `runs/`
+- one sourcing, one packaging-cost, and one promotion-demand ketchup scenario derived from the seed
 - both phase records when phase one accepts
 - round-by-round step history
 - offers, market checks, and final outcomes
@@ -152,13 +154,12 @@ What gets saved:
 
 ### From the frontend
 
-1. Open `http://localhost:3000/`
-2. Click `Test Pipeline`
+1. Post a seed to the backend pipeline endpoint
 3. Review the inline result block
 
 Expected behavior:
 
-- A real deterministic run is created and saved in `runs/`
+- Three seeded ketchup runs are created and saved in `runs/`
 - A simulation export file is saved in `exports/`
 - A trace reference is returned only when Langfuse keys are configured
 - Missing OpenAI or Langfuse keys do not crash the app; the result still returns cleanly
@@ -166,13 +167,16 @@ Expected behavior:
 ### From the backend directly
 
 ```bash
-curl -X POST http://localhost:8000/simulation/test-pipeline
+curl -X POST http://localhost:8000/simulation/test-pipeline \
+  -H "Content-Type: application/json" \
+  -d '{"seed": 42}'
 ```
 
 ## Notes
 
 - Backend run records are stored as JSON in `runs/`
 - Simulation exports are stored as JSON in `exports/`
-- Each run simulates two linked negotiations: supplier to manufacturer, then manufacturer to retailer
+- Each run simulates two linked negotiations: seller to manufacturer, then manufacturer to retailer
+- Each seed produces three ketchup business scenarios
 - The first deal affects the second through the manufacturer cost basis and downstream sell floor
 - The frontend uses typed API calls against the FastAPI backend

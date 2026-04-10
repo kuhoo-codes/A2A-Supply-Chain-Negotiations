@@ -1,30 +1,25 @@
 import Link from "next/link";
 
 import { ErrorState } from "../components/error-state";
-import { HealthStatus } from "../components/health-status";
 import { InfoPanel } from "../components/info-panel";
-import { RunSimulationForm } from "../components/run-simulation-form";
+import { RunSeedForm } from "../components/run-seed-form";
 import { RunCard } from "../components/run-card";
-import { getApiBaseUrl, getBackendHealth, getRuns } from "../lib/api";
+import { getApiBaseUrl, getRuns } from "../lib/api";
 
 
 export default async function HomePage() {
-  const [healthResult, runsResult] = await Promise.all([
-    getBackendHealth(),
-    getRuns(),
-  ]);
+  const runsResult = await getRuns();
   const latestRuns = runsResult.data?.slice(0, 3) ?? [];
 
   return (
     <main>
       <section className="hero">
-        <div className="eyebrow">Negotiation Workspace</div>
-        <h1>A2A Supply Chain Negotiations</h1>
-        <p>Minimal interface for reviewing deterministic negotiation runs.</p>
-        <HealthStatus
-          error={healthResult.error}
-          status={healthResult.data?.status ?? null}
-        />
+        <div className="eyebrow">Tomato Ketchup Ops</div>
+        <h1>Run three seller, manufacturer, and retailer negotiations from one seed.</h1>
+        <p>
+          Enter one random seed and the system generates three tomato-ketchup
+          supply chain simulations across seller, manufacturer, and retailer deal flows.
+        </p>
         <div className="hero-actions">
           <Link className="button secondary" href="/runs">
             View Runs
@@ -34,7 +29,7 @@ export default async function HomePage() {
           </a>
         </div>
         <div className="hero-tools">
-          <RunSimulationForm mode="redirect" />
+          <RunSeedForm mode="redirect" />
         </div>
       </section>
 
@@ -68,15 +63,15 @@ export default async function HomePage() {
       <section className="section-grid compact">
         <InfoPanel
           title="Simulation"
-          description="Reserved for scenario setup, agent configuration, and manual simulation controls."
+          description="Each seed creates three ketchup supply chain simulations with saved seller, manufacturer, and retailer negotiations."
         />
         <InfoPanel
           title="Traces"
-          description="Reserved for Langfuse trace links and execution-level inspection."
+          description="Later this will hold trace links and step-level execution metadata for each generated run."
         />
         <InfoPanel
-          title="Diagnosis"
-          description="Reserved for concise run assessment, negotiation friction, and next-action summaries."
+          title="Website"
+          description="The interface now assumes a tomato-ketchup business context instead of a generic negotiation workspace."
         />
       </section>
     </main>

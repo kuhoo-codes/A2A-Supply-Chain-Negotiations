@@ -10,6 +10,10 @@ export type HealthResponse = {
   status: string;
 };
 
+export type SimulationSeedRequest = {
+  seed: number;
+};
+
 export type PipelineDependencyStatus = {
   configured: boolean;
   available: boolean;
@@ -30,6 +34,12 @@ export type SimulationTestPipelineResult = {
   openai: PipelineDependencyStatus;
   langfuse: PipelineDependencyStatus;
   events: string[];
+};
+
+export type SimulationBatchResult = {
+  seed: number;
+  count: number;
+  runs: RunRecord[];
 };
 
 export type Agent = {

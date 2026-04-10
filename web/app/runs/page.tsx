@@ -1,6 +1,6 @@
 import { EmptyState } from "../../components/empty-state";
 import { ErrorState } from "../../components/error-state";
-import { RunSimulationForm } from "../../components/run-simulation-form";
+import { RunSeedForm } from "../../components/run-seed-form";
 import { RunCard } from "../../components/run-card";
 import { getRuns } from "../../lib/api";
 
@@ -13,12 +13,12 @@ export default async function RunsPage() {
       <div className="eyebrow">Runs</div>
       <h1>Runs</h1>
       <p>
-        Saved negotiation records from the backend are listed here with a small
-        summary for each run.
+        Each run is one saved seller, manufacturer, and retailer negotiation chain.
+        Running a seed creates three new runs at once.
       </p>
 
       <div className="page-actions">
-        <RunSimulationForm />
+        <RunSeedForm />
       </div>
 
       {result.error ? (

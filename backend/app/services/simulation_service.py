@@ -1,4 +1,5 @@
 import json
+from random import Random
 from uuid import uuid4
 
 from backend.app.clients.langfuse_client import LangfuseTraceWrapper
@@ -23,9 +24,10 @@ from backend.app.models.run import (
 from backend.app.models.simulation import (
     PipelineDependencyStatus,
     PipelineExportRecord,
+    SimulationBatchResult,
     SimulationTestPipelineResult,
 )
-from backend.app.models.simulation_request import SimulationRunRequest
+from backend.app.models.simulation_request import SimulationRunConfig, SimulationSeedRequest
 from backend.app.services.export_repository import save_simulation_export
 from backend.app.services.run_repository import save_run_record
 
@@ -34,7 +36,7 @@ class SimulationExecutionError(Exception):
     pass
 
 
-def simulate_run(request: SimulationRunRequest | None = None) -> RunRecord:
+def simulate_run(request: SimulationRunConfig | None) -> RunRecord:
     if request is None:
         raise SimulationExecutionError("Simulation input is required.")
 
@@ -174,7 +176,12 @@ def simulate_run(request: SimulationRunRequest | None = None) -> RunRecord:
     return run
 
 
-def run_test_pipeline(request: SimulationRunRequest | None = None) -> SimulationTestPipelineResult:
+def run_seeded_simulations(request: SimulationSeedRequest) -> SimulationBatchResult:
+    runs = [simulate_run(item) for item in _build_seeded_requests(request.seed)]
+    return SimulationBatchResult(seed=request.seed, count=len(runs), runs=runs)
+
+
+def run_test_pipeline(request: SimulationSeedRequest | None = None) -> SimulationTestPipelineResult:
     settings = get_settings()
     openai_wrapper = OpenAIClientWrapper(settings)
     langfuse_wrapper = LangfuseTraceWrapper(settings)
@@ -183,7 +190,10 @@ def run_test_pipeline(request: SimulationRunRequest | None = None) -> Simulation
     events: list[str] = []
 
     try:
-        run = simulate_run(request)
+        if request is None:
+            raise SimulationExecutionError("Seed input is required.")
+        batch = run_seeded_simulations(request)
+        run = batch.runs[0]
     except SimulationExecutionError as exc:
         return SimulationTestPipelineResult(
             success=False,
@@ -916,3 +926,130 @@ def _is_valid_action(decision: dict) -> bool:
 
 def manufacturer_floor_if_applicable(seller: Agent, fallback: float) -> float:
     return seller.reservation_prices.min_sell_price or fallback
+
+
+def _build_seeded_requests(seed: int) -> list:
+    rng = Random(seed)
+    scenario_builders = [
+        _build_harvest_pressure_scenario,
+        _build_packaging_cost_scenario,
+        _build_retail_promotion_scenario,
+    ]
+    return [builder(rng, seed, index + 1) for index, builder in enumerate(scenario_builders)]
+
+
+def _build_harvest_pressure_scenario(rng: Random, seed: int, index: int):
+    target_quantity = rng.randint(1800, 2600)
+    baseline_unit_price = round(rng.uniform(2.1, 2.9), 2)
+    supplier_min_sell_price = round(baseline_unit_price * rng.uniform(0.86, 0.94), 2)
+    manufacturer_max_buy_price = round(baseline_unit_price * rng.uniform(0.98, 1.08), 2)
+    manufacturer_margin_floor = round(rng.uniform(0.25, 0.42), 2)
+    manufacturer_min_sell_price = round(manufacturer_max_buy_price + manufacturer_margin_floor, 2)
+    retailer_max_buy_price = round(manufacturer_min_sell_price * rng.uniform(1.06, 1.18), 2)
+    return _seeded_request(
+        seed=seed,
+        index=index,
+        title="Tomato Harvest Pricing Run",
+        market_region=_pick(rng, ["California", "Texas", "Ontario"]),
+        demand_signal="Retail ketchup demand is steady, but wholesale buyers want price protection before peak tomato procurement.",
+        supply_signal="Tomato harvest yields are uneven across growing regions, putting pressure on paste input pricing.",
+        baseline_unit_price=baseline_unit_price,
+        target_quantity=target_quantity,
+        supplier_min_sell_price=supplier_min_sell_price,
+        manufacturer_max_buy_price=manufacturer_max_buy_price,
+        manufacturer_min_sell_price=manufacturer_min_sell_price,
+        retailer_max_buy_price=retailer_max_buy_price,
+        manufacturer_margin_floor=manufacturer_margin_floor,
+        max_rounds=rng.randint(3, 5),
+    )
+
+
+def _build_packaging_cost_scenario(rng: Random, seed: int, index: int):
+    target_quantity = rng.randint(1400, 2200)
+    baseline_unit_price = round(rng.uniform(2.4, 3.2), 2)
+    supplier_min_sell_price = round(baseline_unit_price * rng.uniform(0.88, 0.96), 2)
+    manufacturer_max_buy_price = round(baseline_unit_price * rng.uniform(1.0, 1.09), 2)
+    manufacturer_margin_floor = round(rng.uniform(0.3, 0.5), 2)
+    manufacturer_min_sell_price = round(manufacturer_max_buy_price + manufacturer_margin_floor, 2)
+    retailer_max_buy_price = round(manufacturer_min_sell_price * rng.uniform(1.05, 1.16), 2)
+    return _seeded_request(
+        seed=seed,
+        index=index,
+        title="Bottle and Cap Cost Run",
+        market_region=_pick(rng, ["Midwest", "Southeast", "Northeast"]),
+        demand_signal="Retailers are asking for stable ketchup pricing even as packaging contracts are being repriced.",
+        supply_signal="Glass bottle and cap suppliers increased quoting pressure after freight and packaging resin costs moved up.",
+        baseline_unit_price=baseline_unit_price,
+        target_quantity=target_quantity,
+        supplier_min_sell_price=supplier_min_sell_price,
+        manufacturer_max_buy_price=manufacturer_max_buy_price,
+        manufacturer_min_sell_price=manufacturer_min_sell_price,
+        retailer_max_buy_price=retailer_max_buy_price,
+        manufacturer_margin_floor=manufacturer_margin_floor,
+        max_rounds=rng.randint(3, 5),
+    )
+
+
+def _build_retail_promotion_scenario(rng: Random, seed: int, index: int):
+    target_quantity = rng.randint(2200, 3200)
+    baseline_unit_price = round(rng.uniform(2.6, 3.4), 2)
+    supplier_min_sell_price = round(baseline_unit_price * rng.uniform(0.9, 0.97), 2)
+    manufacturer_max_buy_price = round(baseline_unit_price * rng.uniform(1.02, 1.11), 2)
+    manufacturer_margin_floor = round(rng.uniform(0.28, 0.48), 2)
+    manufacturer_min_sell_price = round(manufacturer_max_buy_price + manufacturer_margin_floor, 2)
+    retailer_max_buy_price = round(manufacturer_min_sell_price * rng.uniform(1.04, 1.14), 2)
+    return _seeded_request(
+        seed=seed,
+        index=index,
+        title="Promotion Inventory Surge Run",
+        market_region=_pick(rng, ["West Coast", "Great Lakes", "Mid-Atlantic"]),
+        demand_signal="Retail chains are loading ketchup inventory ahead of a multi-week promotion and need fast replenishment.",
+        supply_signal="Upstream ingredient supply is stable, but rush production slots are limited this month.",
+        baseline_unit_price=baseline_unit_price,
+        target_quantity=target_quantity,
+        supplier_min_sell_price=supplier_min_sell_price,
+        manufacturer_max_buy_price=manufacturer_max_buy_price,
+        manufacturer_min_sell_price=manufacturer_min_sell_price,
+        retailer_max_buy_price=retailer_max_buy_price,
+        manufacturer_margin_floor=manufacturer_margin_floor,
+        max_rounds=rng.randint(3, 5),
+    )
+
+
+def _seeded_request(
+    seed: int,
+    index: int,
+    title: str,
+    market_region: str,
+    demand_signal: str,
+    supply_signal: str,
+    baseline_unit_price: float,
+    target_quantity: int,
+    supplier_min_sell_price: float,
+    manufacturer_max_buy_price: float,
+    manufacturer_min_sell_price: float,
+    retailer_max_buy_price: float,
+    manufacturer_margin_floor: float,
+    max_rounds: int,
+):
+    return SimulationRunConfig(
+        title=f"{title} Seed {seed}-{index}",
+        product_name="Tomato Ketchup",
+        product_category="condiments",
+        market_region=market_region,
+        baseline_unit_price=baseline_unit_price,
+        target_quantity=target_quantity,
+        currency="USD",
+        demand_signal=demand_signal,
+        supply_signal=supply_signal,
+        max_rounds_per_negotiation=max_rounds,
+        supplier_min_sell_price=supplier_min_sell_price,
+        manufacturer_max_buy_price=manufacturer_max_buy_price,
+        manufacturer_min_sell_price=manufacturer_min_sell_price,
+        retailer_max_buy_price=retailer_max_buy_price,
+        manufacturer_margin_floor=manufacturer_margin_floor,
+    )
+
+
+def _pick(rng: Random, options: list[str]) -> str:
+    return options[rng.randrange(len(options))]
