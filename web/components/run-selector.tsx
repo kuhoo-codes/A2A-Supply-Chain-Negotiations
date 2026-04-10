@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { RunSummary } from "../lib/api-types";
 import { formatDateTime, formatLabel } from "../lib/format";
@@ -15,7 +15,10 @@ type RunSelectorProps = {
 export function RunSelector({ runs, variant = "page" }: RunSelectorProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const selectedRunId = pathname?.startsWith("/runs/") ? pathname.split("/")[2] ?? "" : "";
+  const searchParams = useSearchParams();
+  const selectedRunId = pathname?.startsWith("/runs/")
+    ? pathname.split("/")[2] ?? ""
+    : searchParams.get("selected") ?? searchParams.get("ids") ?? "";
 
   return (
     <div className={`run-selector-shell ${variant === "nav" ? "nav" : ""}`}>
@@ -30,7 +33,9 @@ export function RunSelector({ runs, variant = "page" }: RunSelectorProps) {
               return;
             }
 
-            router.push(`/runs/${nextRunId}`);
+            router.push(`/runs?ids=${nextRunId}&selected=${nextRunId}`, {
+              scroll: false,
+            });
           }}
         >
           <option value="">{variant === "nav" ? "Select run id" : "Select a run"}</option>

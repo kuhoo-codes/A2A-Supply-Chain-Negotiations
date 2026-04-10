@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -67,6 +66,14 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [highlightedMessageIndex, setHighlightedMessageIndex] = useState<number | null>(null);
   const previousMessageCount = useRef(initialDetail.conversation?.length ?? 0);
+
+  useEffect(() => {
+    setDetail(initialDetail);
+    setRefreshError(null);
+    setIsRefreshing(false);
+    setHighlightedMessageIndex(null);
+    previousMessageCount.current = initialDetail.conversation?.length ?? 0;
+  }, [initialDetail]);
 
   useEffect(() => {
     if (detail.run.status !== "running") {
@@ -163,51 +170,6 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
 
   return (
     <main className="detail-layout live-detail">
-      <section className="panel detail-summary-panel">
-        <div className="eyebrow">Run Detail</div>
-        <h1>{run.title}</h1>
-        <p>{run.scenario}</p>
-
-        <div className="summary-grid">
-          <div className="summary-item">
-            <span className="summary-label">Status</span>
-            <span className={`badge ${run.status === "running" ? "pulse" : ""}`}>
-              {formatLabel(run.status)}
-            </span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Created</span>
-            <span>{formatDateTime(run.created_at)}</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Product</span>
-            <span>{run.product_context.product_name}</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Market</span>
-            <span>{run.product_context.market_region}</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Quantity</span>
-            <span>{run.product_context.target_quantity}</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Baseline Price</span>
-            <span>{formatCurrency(run.product_context.baseline_unit_price, run.product_context.currency)}</span>
-          </div>
-        </div>
-
-        <div className="hero-actions">
-          <Link className="button secondary" href="/runs">
-            Back to Runs
-          </Link>
-          {run.status === "running" ? (
-            <span className="badge leaf">{liveStatusLabel}</span>
-          ) : null}
-        </div>
-        {refreshError ? <p className="inline-error">{refreshError}</p> : null}
-      </section>
-
       <section className="detail-top-grid">
         <section className="panel chat-panel">
           <div className="section-heading">
@@ -310,6 +272,48 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
             />
           </section>
         </div>
+      </section>
+
+      <section className="detail-summary-panel">
+        <div className="eyebrow">Run Detail</div>
+        <h1>{run.title}</h1>
+        <p>{run.scenario}</p>
+
+        <div className="summary-grid">
+          <div className="summary-item">
+            <span className="summary-label">Status</span>
+            <span className={`badge ${run.status === "running" ? "pulse" : ""}`}>
+              {formatLabel(run.status)}
+            </span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">Created</span>
+            <span>{formatDateTime(run.created_at)}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">Product</span>
+            <span>{run.product_context.product_name}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">Market</span>
+            <span>{run.product_context.market_region}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">Quantity</span>
+            <span>{run.product_context.target_quantity}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">Baseline Price</span>
+            <span>{formatCurrency(run.product_context.baseline_unit_price, run.product_context.currency)}</span>
+          </div>
+        </div>
+
+        <div className="hero-actions">
+          {run.status === "running" ? (
+            <span className="badge leaf">{liveStatusLabel}</span>
+          ) : null}
+        </div>
+        {refreshError ? <p className="inline-error">{refreshError}</p> : null}
       </section>
 
       <section className="panel">

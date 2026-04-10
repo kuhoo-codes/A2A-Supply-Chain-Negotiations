@@ -3,13 +3,19 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { SimulationBatchLaunchResult } from "../lib/api-types";
+
 
 type RunSeedFormProps = {
-  mode?: "refresh" | "redirect";
+  mode?: "refresh" | "redirect" | "inline";
+  onLaunched?: (payload: SimulationBatchLaunchResult) => void;
 };
 
 
-export function RunSeedForm({ mode = "refresh" }: RunSeedFormProps) {
+export function RunSeedForm({
+  mode = "refresh",
+  onLaunched,
+}: RunSeedFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -33,7 +39,7 @@ export function RunSeedForm({ mode = "refresh" }: RunSeedFormProps) {
       });
 
       const payload = (await response.json()) as {
-        data: { count: number } | null;
+        data: SimulationBatchLaunchResult | null;
         error: string | null;
       };
 
@@ -46,9 +52,20 @@ export function RunSeedForm({ mode = "refresh" }: RunSeedFormProps) {
 
       setSuccess(`${payload.data.count} simulations launched.`);
       setIsSubmitting(false);
+      const launchData = payload.data;
+      const launchedRunIds = launchData.runs.map((run) => run.id).filter(Boolean);
+      const runsPath =
+        launchedRunIds.length > 0
+          ? `/runs?ids=${launchedRunIds.join(",")}&selected=${launchedRunIds[0]}`
+          : "/runs";
       startTransition(() => {
+        if (mode === "inline") {
+          onLaunched?.(launchData);
+          return;
+        }
+
         if (mode === "redirect") {
-          router.push("/runs");
+          router.push(runsPath);
           return;
         }
 

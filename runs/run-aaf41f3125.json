@@ -1,0 +1,127 @@
+{
+  "id": "run-aaf41f3125",
+  "title": "Tomato Harvest Pricing Run Seed 676-1",
+  "status": "running",
+  "scenario": "Tomato Ketchup in Ontario. Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation.",
+  "created_at": "2026-04-10T12:32:41.996230Z",
+  "updated_at": "2026-04-10T12:32:44.992344Z",
+  "product_context": {
+    "product_name": "Tomato Ketchup",
+    "product_category": "condiments",
+    "market_region": "Ontario",
+    "baseline_unit_price": 2.76,
+    "target_quantity": 1830,
+    "currency": "USD",
+    "demand_signal": "Retail ketchup demand is steady, but wholesale buyers want price protection before peak tomato procurement.",
+    "supply_signal": "Tomato harvest yields are uneven across growing regions, putting pressure on paste input pricing."
+  },
+  "agents": [
+    {
+      "id": "supplier",
+      "name": "Supplier",
+      "role": "supplier",
+      "objective": "Sell above the supplier reservation price while keeping volume committed.",
+      "reservation_prices": {
+        "min_sell_price": 2.52,
+        "max_buy_price": null
+      }
+    },
+    {
+      "id": "manufacturer",
+      "name": "Manufacturer",
+      "role": "manufacturer",
+      "objective": "Buy below the procurement ceiling and preserve downstream margin.",
+      "reservation_prices": {
+        "min_sell_price": 3.17,
+        "max_buy_price": 2.83
+      }
+    },
+    {
+      "id": "retailer",
+      "name": "Retailer",
+      "role": "retailer",
+      "objective": "Buy enough units without exceeding the retail reservation price.",
+      "reservation_prices": {
+        "min_sell_price": null,
+        "max_buy_price": 3.68
+      }
+    }
+  ],
+  "phases": [
+    {
+      "name": "supplier_manufacturer",
+      "label": "Supplier to Manufacturer",
+      "order": 1,
+      "description": "The supplier negotiates an upstream unit price with the manufacturer."
+    },
+    {
+      "name": "manufacturer_retailer",
+      "label": "Manufacturer to Retailer",
+      "order": 2,
+      "description": "The manufacturer negotiates a downstream unit price with the retailer after the upstream deal sets its cost basis."
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "phase": "supplier_manufacturer",
+      "negotiation_id": "neg-81160fe9",
+      "round_number": 1,
+      "agent_id": "supplier",
+      "kind": "offer",
+      "message": "Opening offer at a competitive market rate.",
+      "outcome": "Offer queued for delivery on the next turn.",
+      "proposed_price": 2.82,
+      "delivered_message": null,
+      "created_at": "2026-04-10T12:32:44.992301Z",
+      "tool_calls": [
+        {
+          "id": "tool-634bc406",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "review_state",
+          "arguments": {
+            "negotiation_id": "neg-81160fe9",
+            "round_number": 1
+          },
+          "result_summary": "Reviewed state for supplier_manufacturer round 1. Pending message: none.",
+          "created_at": "2026-04-10T12:32:42.684307Z"
+        },
+        {
+          "id": "tool-be1f0765",
+          "step_index": 1,
+          "agent_id": "supplier",
+          "tool_name": "check_market_price",
+          "arguments": {
+            "negotiation_id": "neg-81160fe9",
+            "product": "Tomato Ketchup",
+            "observed_market_price": 6.67
+          },
+          "result_summary": "Observed market reference price: 6.67.",
+          "created_at": "2026-04-10T12:32:42.684440Z"
+        }
+      ]
+    }
+  ],
+  "negotiations": [],
+  "diagnosis": {
+    "outcome": "Simulation is running.",
+    "chain_effect": "Live negotiation activity is being written to the transcript as each step completes.",
+    "key_risks": [
+      "Final diagnosis and derived metrics are not complete yet."
+    ],
+    "key_signals": [
+      "1 transcript steps persisted.",
+      "0 negotiations resolved so far."
+    ],
+    "suggested_next_actions": [
+      "Keep this page open to watch additional messages arrive."
+    ]
+  },
+  "max_rounds_per_negotiation": 4,
+  "notes": "Simulation is still running and this snapshot is live.",
+  "tags": [
+    "simulation",
+    "supply-chain"
+  ]
+}
