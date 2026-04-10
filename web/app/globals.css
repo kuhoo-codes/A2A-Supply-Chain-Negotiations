@@ -174,6 +174,150 @@ a {
   margin-top: 24px;
 }
 
+.home-page {
+  display: grid;
+  gap: 24px;
+}
+
+.tomato-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 420px);
+  gap: 28px;
+  align-items: stretch;
+  overflow: hidden;
+  position: relative;
+  background:
+    radial-gradient(circle at 14% 18%, rgba(184, 50, 31, 0.18), transparent 22%),
+    radial-gradient(circle at 82% 18%, rgba(81, 105, 60, 0.12), transparent 18%),
+    linear-gradient(135deg, rgba(255, 248, 241, 0.98), rgba(250, 236, 225, 0.98));
+}
+
+.tomato-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -12% -28% 46%;
+  height: 240px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(184, 50, 31, 0.18), transparent 48%),
+    radial-gradient(circle at 65% 40%, rgba(81, 105, 60, 0.12), transparent 36%);
+  pointer-events: none;
+}
+
+.tomato-hero-copy,
+.tomato-launch-card {
+  position: relative;
+  z-index: 1;
+}
+
+.tomato-hero-copy {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  max-width: none;
+}
+
+.tomato-hero-copy h1 {
+  max-width: 18ch;
+}
+
+.tomato-hero-copy p {
+  max-width: 72ch;
+}
+
+.tomato-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.tomato-stat {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 253, 249, 0.72);
+  border: 1px solid rgba(184, 50, 31, 0.14);
+}
+
+.tomato-stat-value {
+  font-size: 1.5rem;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.tomato-stat-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tomato-launch-card {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border-radius: 18px;
+  background: rgba(255, 252, 248, 0.9);
+  border: 1px solid rgba(184, 50, 31, 0.18);
+  box-shadow: 0 18px 30px rgba(104, 47, 32, 0.08);
+  align-content: start;
+}
+
+.tomato-launch-card h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.tomato-launch-card p,
+.tomato-launch-note {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.tomato-signal-panel .section-grid {
+  margin-top: 0;
+}
+
+.tomato-info-card {
+  background:
+    linear-gradient(180deg, rgba(255, 251, 247, 0.98), rgba(251, 243, 235, 0.98));
+  min-height: 190px;
+}
+
+.tomato-story-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.9fr);
+  gap: 24px;
+}
+
+.tomato-story-panel,
+.tomato-operator-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.tomato-scene-list,
+.tomato-operator-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.tomato-scene,
+.tomato-operator-item {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 251, 247, 0.74);
+  border: 1px solid rgba(184, 50, 31, 0.14);
+}
+
+.tomato-operator-item strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+}
+
 .card,
 .run-card {
   background: var(--surface);
@@ -496,8 +640,8 @@ a {
 
 .detail-shell {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(228px, 280px) minmax(0, 1fr);
+  gap: 0;
   align-items: start;
 }
 
@@ -508,7 +652,7 @@ a {
 }
 
 .detail-main-center {
-  width: min(100%, 1180px);
+  width: min(100%, 1260px);
   margin: 0 auto;
   display: grid;
   gap: 24px;
@@ -516,7 +660,7 @@ a {
 
 .detail-top-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(360px, 0.95fr);
+  grid-template-columns: minmax(0, 2.05fr) minmax(300px, 0.82fr);
   gap: 20px;
   align-items: start;
 }
@@ -565,9 +709,9 @@ a {
   border: 1px solid rgba(184, 50, 31, 0.24);
   border-radius: 14px;
   box-shadow: 0 10px 20px rgba(104, 47, 32, 0.05);
-  padding: 20px 22px;
+  padding: 15px 16px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .shock-control-card .button {
@@ -1355,6 +1499,8 @@ a {
 
   .detail-shell,
   .detail-top-grid,
+  .tomato-hero,
+  .tomato-story-grid,
   .run-strip,
   .summary-grid,
   .detail-columns,
@@ -1388,6 +1534,10 @@ a {
   .shock-banner {
     grid-template-columns: 1fr;
   }
+
+  .tomato-hero-stats {
+    grid-template-columns: 1fr;
+  }
 }
 
 @keyframes pulse {
@@ -1400,6 +1550,20 @@ a {
 }
 
 @media (max-width: 760px) {
+  .tomato-launch-card {
+    padding: 18px;
+  }
+
+  .tomato-stat,
+  .tomato-scene,
+  .tomato-operator-item {
+    padding: 12px 14px;
+  }
+
+  .tomato-hero::after {
+    inset: auto -30% -24% 22%;
+  }
+
   .runs-page-header {
     grid-template-columns: 1fr;
     gap: 14px;

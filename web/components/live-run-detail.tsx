@@ -247,6 +247,12 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
   const orderedEvents = [...allEvents].reverse();
   const liveStatusLabel = isRefreshing ? "Syncing" : "Live";
   const isRunLive = run.status === "running";
+  const runStatusBadgeClassName =
+    run.status === "completed"
+      ? "badge leaf"
+      : run.status === "failed"
+        ? "badge danger"
+        : "badge pulse";
 
   async function handleShockInject() {
     setShockRequestState("sending");
@@ -358,7 +364,7 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
             <div className="summary-grid">
               <div className="summary-item">
                 <span className="summary-label">Status</span>
-                <span className={`badge ${run.status === "running" ? "pulse" : ""}`}>
+                <span className={runStatusBadgeClassName}>
                   {formatLabel(run.status)}
                 </span>
               </div>
@@ -912,23 +918,25 @@ function buildPhoneFeedItems({
   currency: string;
   highlightedMessageIndex: number | null;
 }): FeedItem[] {
-  const messageItems: FeedItem[] = messages.map((message) => ({
-    key: `message:${message.index}`,
-    type: "message",
-    timestamp: message.timestamp,
-    phase: message.phase,
-    speakerId: message.speaker_id,
-    speakerName: message.speaker_name,
-    speakerLabel: message.speaker_name,
-    round: message.round,
-    kind: message.kind,
-    priceLabel:
-      message.offer_price !== null
-        ? formatCurrency(message.offer_price, message.currency)
-        : "No price",
-    body: message.message,
-    isNew: highlightedMessageIndex === message.index,
-  }));
+  const messageItems: FeedItem[] = messages
+    .filter((message) => message.speaker_id !== "market_desk" && message.kind !== "system_notice")
+    .map((message) => ({
+      key: `message:${message.index}`,
+      type: "message",
+      timestamp: message.timestamp,
+      phase: message.phase,
+      speakerId: message.speaker_id,
+      speakerName: message.speaker_name,
+      speakerLabel: message.speaker_name,
+      round: message.round,
+      kind: message.kind,
+      priceLabel:
+        message.offer_price !== null
+          ? formatCurrency(message.offer_price, message.currency)
+          : "No price",
+      body: message.message,
+      isNew: highlightedMessageIndex === message.index,
+    }));
 
   const activityItems: FeedItem[] = events
     .filter((event) => event.phase === phase)

@@ -19,11 +19,17 @@ export function RunStripCard({
   single = false,
 }: RunStripCardProps) {
   const className = `run-strip-card ${active ? "active" : ""} ${single ? "single" : ""}`.trim();
+  const statusClassName =
+    run.status === "completed"
+      ? "badge leaf"
+      : run.status === "failed"
+        ? "badge danger"
+        : "badge pulse";
   const content = (
     <>
       <div className="run-strip-header">
         <strong>{run.id}</strong>
-        <span className={`badge ${run.status === "running" ? "pulse" : ""}`}>
+        <span className={statusClassName}>
           {formatLabel(run.status)}
         </span>
       </div>

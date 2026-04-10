@@ -10,11 +10,18 @@ type RunCardProps = {
 
 
 export function RunCard({ run }: RunCardProps) {
+  const statusClassName =
+    run.status === "completed"
+      ? "badge leaf"
+      : run.status === "failed"
+        ? "badge danger"
+        : "badge pulse";
+
   return (
     <Link className="run-card" href={`/runs/${run.id}`}>
       <div className="run-card-header">
         <h2>{run.title}</h2>
-        <span className="badge">{formatLabel(run.status)}</span>
+        <span className={statusClassName}>{formatLabel(run.status)}</span>
       </div>
       <p>{run.scenario}</p>
       <div className="run-meta">
