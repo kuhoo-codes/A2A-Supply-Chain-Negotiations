@@ -4,13 +4,15 @@ import { getApiBaseUrl } from "../../../../lib/api";
 import { SimulationTestPipelineResult } from "../../../../lib/api-types";
 
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const body = await request.json().catch(() => ({ seed: 42 }));
     const response = await fetch(`${getApiBaseUrl()}/simulation/test-pipeline`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      body: JSON.stringify(body),
       cache: "no-store",
     });
 

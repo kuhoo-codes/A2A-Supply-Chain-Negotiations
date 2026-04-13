@@ -30,12 +30,6 @@ class SimulationTestPipelineResult(BaseModel):
     events: list[str] = Field(default_factory=list)
 
 
-class SimulationBatchResult(BaseModel):
-    seed: int
-    count: int
-    runs: list[RunRecord]
-
-
 class SimulationBatchLaunchResult(BaseModel):
     seed: int
     count: int

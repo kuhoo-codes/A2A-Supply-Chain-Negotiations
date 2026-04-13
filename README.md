@@ -230,6 +230,20 @@ Derived fields currently exported include:
 - where the run failed
 - suspected failure type when one can be inferred cheaply
 
+Runtime storage directories are intentionally kept out of version control except for
+their `.gitkeep` placeholders. Local tests can isolate storage by setting
+`A2A_RUNS_DIR`, `A2A_EVENTS_DIR`, and `A2A_EXPORTS_DIR`.
+
+## Tests
+
+```bash
+npm test
+```
+
+The test suite covers the backend health and run APIs, missing-OpenAI preflight
+behavior, deterministic seeded scenario generation, price coercion, and a fake-LLM
+negotiation path.
+
 ## Notes
 
 - Backend run records are stored as JSON in `runs/`

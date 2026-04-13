@@ -29,7 +29,6 @@ from backend.app.models.simulation import (
     SimulationBatchLaunchResult,
     PipelineDependencyStatus,
     PipelineExportRecord,
-    SimulationBatchResult,
     SimulationTestPipelineResult,
 )
 from backend.app.models.simulation_request import SimulationRunConfig, SimulationSeedRequest
@@ -232,6 +231,9 @@ def _execute_simulation_run(
         openai_configured, openai_available, openai_message = openai_wrapper.get_status()
         trace_id = langfuse_wrapper.get_current_trace_id()
         trace_url = langfuse_wrapper.get_trace_url(trace_id=trace_id)
+        if not openai_configured or not openai_available:
+            raise SimulationExecutionError(openai_message)
+
         supplier = Agent(
             id="supplier",
             name="Supplier",
@@ -298,9 +300,6 @@ def _execute_simulation_run(
         )
         save_run_event_log(settings.events_dir, event_collector.build_log())
         try:
-            if not openai_configured or not openai_available:
-                raise SimulationExecutionError(openai_message)
-
             event_collector.log(
                 event_type=RunEventType.PHASE_START,
                 phase=PhaseName.SUPPLIER_MANUFACTURER,
@@ -605,14 +604,15 @@ def _execute_simulation_run(
             raise
 
 
-def run_seeded_simulations(request: SimulationSeedRequest) -> SimulationBatchResult:
-    runs = [simulate_run(item) for item in _build_seeded_requests(request.seed)]
-    return SimulationBatchResult(seed=request.seed, count=len(runs), runs=runs)
-
-
 def launch_seeded_simulations(
     request: SimulationSeedRequest,
 ) -> SimulationBatchLaunchResult:
+    openai_configured, openai_available, openai_message = OpenAIClientWrapper(
+        get_settings()
+    ).get_status()
+    if not openai_configured or not openai_available:
+        raise SimulationExecutionError(openai_message)
+
     launched_runs: list[RunRecord] = []
     for config in _build_seeded_requests(request.seed):
         created_at = utc_now()
@@ -1073,7 +1073,7 @@ def _simulate_negotiation(
         shock_alert_message = None
         if get_shock_registry().has_pending(run_id):
             shock_alert_message = (
-                "⚡ BREAKING: Market disruption detected. "
+                "BREAKING: Market disruption detected. "
                 "Call check_market_price immediately to get the updated reference price before making your next move."
             )
             steps.append(
@@ -1201,7 +1201,7 @@ def _simulate_negotiation(
 
         if kind == "make_offer":
             if current_agent.id == seller.id:
-                proposed_price = _bound_seller_offer(
+                proposed_price = _offer_price_or_anchor(
                     proposed_price=proposed_price,
                     min_sell_price=min_sell_price,
                     max_buy_price=max_buy_price,
@@ -1210,7 +1210,7 @@ def _simulate_negotiation(
                 )
                 seller_last_offer = proposed_price
             else:
-                proposed_price = _bound_buyer_offer(
+                proposed_price = _offer_price_or_anchor(
                     proposed_price=proposed_price,
                     min_sell_price=min_sell_price,
                     max_buy_price=max_buy_price,
@@ -1354,22 +1354,16 @@ def _simulate_negotiation(
             step_index += 1
             break
         else:
-            fallback_price = (
-                _bound_seller_offer(
-                    proposed_price=None,
-                    min_sell_price=min_sell_price,
-                    max_buy_price=max_buy_price,
-                    previous_offer=seller_last_offer,
-                    counterparty_offer=buyer_last_offer,
-                )
-                if current_agent.id == seller.id
-                else _bound_buyer_offer(
-                    proposed_price=None,
-                    min_sell_price=min_sell_price,
-                    max_buy_price=max_buy_price,
-                    previous_offer=buyer_last_offer,
-                    counterparty_offer=seller_last_offer,
-                )
+            fallback_price = _offer_price_or_anchor(
+                proposed_price=None,
+                min_sell_price=min_sell_price,
+                max_buy_price=max_buy_price,
+                previous_offer=(
+                    seller_last_offer if current_agent.id == seller.id else buyer_last_offer
+                ),
+                counterparty_offer=(
+                    buyer_last_offer if current_agent.id == seller.id else seller_last_offer
+                ),
             )
             if current_agent.id == seller.id:
                 seller_last_offer = fallback_price
@@ -1991,27 +1985,7 @@ def _build_agent_prompt(
     )
 
 
-def _bound_seller_offer(
-    proposed_price: float | None,
-    min_sell_price: float,
-    max_buy_price: float,
-    previous_offer: float | None,
-    counterparty_offer: float | None,
-) -> float:
-    if proposed_price is None:
-        anchor = (
-            previous_offer
-            if previous_offer is not None
-            else counterparty_offer
-            if counterparty_offer is not None
-            else round((min_sell_price + max_buy_price) / 2, 2)
-        )
-        return round(anchor, 2)
-
-    return round(proposed_price, 2)
-
-
-def _bound_buyer_offer(
+def _offer_price_or_anchor(
     proposed_price: float | None,
     min_sell_price: float,
     max_buy_price: float,
@@ -2139,15 +2113,12 @@ def _is_valid_action(decision: dict) -> bool:
     return decision.get("action") in {"make_offer", "accept_offer", "reject_offer"}
 
 
-def manufacturer_floor_if_applicable(seller: Agent, fallback: float) -> float:
-    return seller.reservation_prices.min_sell_price or fallback
-
-
-def _build_seeded_requests(seed: int) -> list:
+def _build_seeded_requests(seed: int) -> list[SimulationRunConfig]:
     rng = Random(seed)
     return [
-        _build_harvest_pressure_scenario(rng, seed, index + 1)
-        for index in range(3)
+        _build_harvest_pressure_scenario(rng, seed, 1),
+        _build_packaging_cost_scenario(rng, seed, 2),
+        _build_retail_promotion_scenario(rng, seed, 3),
     ]
 
 
