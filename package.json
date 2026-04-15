@@ -7,7 +7,6 @@
   "scripts": {
     "setup:all": "./scripts/setup-all.sh",
     "dev": "./scripts/run-all.sh",
-    "test": "python3 -m pytest",
     "dev:web": "npm run dev --workspace web",
     "build:web": "npm run build --workspace web",
     "start:web": "npm run start --workspace web"

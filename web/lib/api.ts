@@ -1,9 +1,9 @@
 import {
   HealthResponse,
+  CounterfactualReplayResponse,
   RunDetailResponse,
   RunRecord,
   RunSummary,
-  SimulationTestPipelineResult,
 } from "./api-types";
 
 
@@ -44,37 +44,7 @@ async function fetchApi<T>(path: string): Promise<ApiResult<T>> {
   } catch {
     return {
       data: null,
-      error: "Backend is unavailable.",
-      status: null,
-    };
-  }
-}
-
-
-async function sendApi<T>(path: string, method: string): Promise<ApiResult<T>> {
-  try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-      },
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return {
-        data: null,
-        error: `Request failed with status ${response.status}.`,
-        status: response.status,
-      };
-    }
-
-    const data = (await response.json()) as T;
-    return { data, error: null, status: response.status };
-  } catch {
-    return {
-      data: null,
-      error: "Backend is unavailable.",
+      error: "Simulation service is unavailable.",
       status: null,
     };
   }
@@ -83,6 +53,21 @@ async function sendApi<T>(path: string, method: string): Promise<ApiResult<T>> {
 
 export function getApiBaseUrl(): string {
   return API_BASE_URL;
+}
+
+export function toUserFacingError(
+  detail: string | undefined,
+  fallback: string,
+): string {
+  if (!detail) {
+    return fallback;
+  }
+
+  if (/(openai|api[_ -]?key|tokens?)/i.test(detail)) {
+    return fallback;
+  }
+
+  return detail;
 }
 
 
@@ -108,8 +93,8 @@ export async function getRunDetail(
 }
 
 
-export async function testSimulationPipeline(): Promise<
-  ApiResult<SimulationTestPipelineResult>
-> {
-  return sendApi<SimulationTestPipelineResult>("/simulation/test-pipeline", "POST");
+export async function getRunCounterfactualReplay(
+  id: string,
+): Promise<ApiResult<CounterfactualReplayResponse>> {
+  return fetchApi<CounterfactualReplayResponse>(`/runs/${id}/counterfactual`);
 }

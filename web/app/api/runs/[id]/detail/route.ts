@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getApiBaseUrl } from "../../../../../lib/api";
+import { getApiBaseUrl, toUserFacingError } from "../../../../../lib/api";
 import { RunDetailResponse } from "../../../../../lib/api-types";
 
 
@@ -26,9 +26,10 @@ export async function GET(_: Request, context: RouteContext) {
       return NextResponse.json(
         {
           data: null,
-          error:
-            errorPayload?.detail ??
-            `Backend request failed with status ${response.status}.`,
+          error: toUserFacingError(
+            errorPayload?.detail,
+            "Unable to load run detail right now.",
+          ),
         },
         { status: response.status },
       );
@@ -40,7 +41,7 @@ export async function GET(_: Request, context: RouteContext) {
     return NextResponse.json(
       {
         data: null,
-        error: "Unable to reach the backend run detail endpoint.",
+        error: "Unable to load run detail right now.",
       },
       { status: 503 },
     );

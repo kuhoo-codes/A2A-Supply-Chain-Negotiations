@@ -14,29 +14,22 @@ export type SimulationSeedRequest = {
   seed: number;
 };
 
-export type PipelineDependencyStatus = {
-  configured: boolean;
-  available: boolean;
-  message: string;
-};
-
-export type PipelineExportRecord = {
-  file_path: string;
-  created_at: string;
-  event_log_path: string | null;
-  trace_path: string | null;
-  conversation_path: string | null;
-};
-
-export type SimulationTestPipelineResult = {
-  success: boolean;
-  message: string;
-  run_id: string;
-  trace_id: string | null;
-  export: PipelineExportRecord | null;
-  openai: PipelineDependencyStatus;
-  langfuse: PipelineDependencyStatus;
-  events: string[];
+export type SimulationRunConfig = {
+  title: string;
+  product_name: string;
+  product_category: string;
+  market_region: string;
+  baseline_unit_price: number;
+  target_quantity: number;
+  currency: string;
+  demand_signal: string;
+  supply_signal: string;
+  max_rounds_per_negotiation: number;
+  supplier_min_sell_price: number;
+  manufacturer_max_buy_price: number;
+  manufacturer_min_sell_price: number;
+  retailer_max_buy_price: number;
+  manufacturer_margin_floor: number;
 };
 
 export type SimulationBatchResult = {
@@ -90,6 +83,7 @@ export type RunEventType =
   | "tool_call"
   | "market_price_check"
   | "market_shock"
+  | "operator_instruction"
   | "offer_made"
   | "offer_received"
   | "accept"
@@ -269,4 +263,35 @@ export type RunEventStreamPayload = {
   type: "run_event";
   run_id: string;
   event: RunEvent;
+};
+
+export type CounterfactualTurningPoint = {
+  step_index: number;
+  phase: PhaseName;
+  round_number: number;
+  agent_id: string;
+  kind: string;
+  price: number | null;
+  note: string;
+};
+
+export type CounterfactualReplayResponse = {
+  run_id: string;
+  title: string;
+  currency: string;
+  turning_points: CounterfactualTurningPoint[];
+};
+
+export type CounterfactualBranchRunRequest = {
+  pivot_step_index: number;
+  instruction: string;
+  label: string | null;
+};
+
+export type CounterfactualBranchRunResponse = {
+  source_run_id: string;
+  pivot_step_index: number;
+  run_id: string;
+  status: string;
+  message: string;
 };

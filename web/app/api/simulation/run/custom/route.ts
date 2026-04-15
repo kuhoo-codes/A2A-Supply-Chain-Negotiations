@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 
-import { getApiBaseUrl, toUserFacingError } from "../../../../lib/api";
+import { getApiBaseUrl, toUserFacingError } from "../../../../../lib/api";
 import {
   SimulationBatchLaunchResult,
-  SimulationSeedRequest,
-} from "../../../../lib/api-types";
+  SimulationRunConfig,
+} from "../../../../../lib/api-types";
 
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as SimulationSeedRequest;
-    const response = await fetch(`${getApiBaseUrl()}/simulation/run`, {
+    const body = (await request.json()) as SimulationRunConfig;
+    const response = await fetch(`${getApiBaseUrl()}/simulation/run/custom`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

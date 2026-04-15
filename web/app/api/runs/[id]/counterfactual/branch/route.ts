@@ -1,16 +1,25 @@
 import { NextResponse } from "next/server";
 
-import { getApiBaseUrl, toUserFacingError } from "../../../../lib/api";
+import { getApiBaseUrl, toUserFacingError } from "../../../../../../lib/api";
 import {
-  SimulationBatchLaunchResult,
-  SimulationSeedRequest,
-} from "../../../../lib/api-types";
+  CounterfactualBranchRunRequest,
+  CounterfactualBranchRunResponse,
+} from "../../../../../../lib/api-types";
 
 
-export async function POST(request: Request) {
+type RouteContext = {
+  params: Promise<{
+    id: string;
+  }>;
+};
+
+
+export async function POST(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+
   try {
-    const body = (await request.json()) as SimulationSeedRequest;
-    const response = await fetch(`${getApiBaseUrl()}/simulation/run`, {
+    const body = (await request.json()) as CounterfactualBranchRunRequest;
+    const response = await fetch(`${getApiBaseUrl()}/runs/${id}/counterfactual/branch`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -28,20 +37,20 @@ export async function POST(request: Request) {
           data: null,
           error: toUserFacingError(
             errorPayload?.detail,
-            "Simulation could not be completed right now.",
+            "New version could not be completed right now.",
           ),
         },
         { status: response.status },
       );
     }
 
-    const data = (await response.json()) as SimulationBatchLaunchResult;
+    const data = (await response.json()) as CounterfactualBranchRunResponse;
     return NextResponse.json({ data, error: null });
   } catch {
     return NextResponse.json(
       {
         data: null,
-        error: "Simulation could not be completed right now.",
+        error: "New version could not be completed right now.",
       },
       { status: 503 },
     );

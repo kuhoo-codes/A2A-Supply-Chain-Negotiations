@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 from random import Random
 from threading import Thread
 from uuid import uuid4
@@ -27,9 +28,6 @@ from backend.app.models.run import (
 )
 from backend.app.models.simulation import (
     SimulationBatchLaunchResult,
-    PipelineDependencyStatus,
-    PipelineExportRecord,
-    SimulationTestPipelineResult,
 )
 from backend.app.models.simulation_request import SimulationRunConfig, SimulationSeedRequest
 from backend.app.services.event_repository import save_run_event_log
@@ -43,6 +41,8 @@ class SimulationExecutionError(Exception):
 
 
 MAX_AGENT_TURNS_PER_NEGOTIATION = 15
+SEEDED_MARKET_REGION = "California"
+SEEDED_MAX_ROUNDS_PER_NEGOTIATION = 15
 
 
 class RunEventCollector:
@@ -96,7 +96,7 @@ class RunEventCollector:
         )
 
     def build_log(self) -> RunEventLog:
-        updated_at = self.events[-1].timestamp if self.events else self.created_at
+        updated_at = max((event.timestamp for event in self.events), default=self.created_at)
         return RunEventLog(
             run_id=self.run_id,
             created_at=self.created_at,
@@ -183,6 +183,19 @@ def simulate_run(request: SimulationRunConfig | None) -> RunRecord:
     return _execute_simulation_run(request).run
 
 
+def _build_scenario_context(request: SimulationRunConfig) -> dict:
+    context = {
+        "demand_signal": request.demand_signal,
+        "supply_signal": request.supply_signal,
+        "branch_source_run_id": request.branch_source_run_id,
+        "branch_pivot_step_index": request.branch_pivot_step_index,
+        "branch_instruction": request.branch_instruction,
+        "operator_instruction": request.branch_instruction,
+        "branch_context": request.branch_context,
+    }
+    return {key: value for key, value in context.items() if value is not None}
+
+
 def _execute_simulation_run(
     request: SimulationRunConfig | None,
     *,
@@ -204,6 +217,7 @@ def _execute_simulation_run(
         f"{simulation_request.product_name} in {simulation_request.market_region}. "
         f"Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation."
     )
+    scenario_context = _build_scenario_context(simulation_request)
     event_collector.log(
         event_type=RunEventType.RUN_START,
         timestamp=created_at,
@@ -332,6 +346,7 @@ def _execute_simulation_run(
                     phase=PhaseName.SUPPLIER_MANUFACTURER,
                     label="Supplier to Manufacturer",
                     product_name=simulation_request.product_name,
+                    scenario_context=scenario_context,
                     reference_market_price=simulation_request.baseline_unit_price,
                     seller=supplier,
                     buyer=manufacturer,
@@ -428,6 +443,7 @@ def _execute_simulation_run(
                         phase=PhaseName.MANUFACTURER_RETAILER,
                         label="Manufacturer to Retailer",
                         product_name=simulation_request.product_name,
+                        scenario_context=scenario_context,
                         reference_market_price=simulation_request.baseline_unit_price,
                         seller=manufacturer,
                         buyer=retailer,
@@ -607,29 +623,63 @@ def _execute_simulation_run(
 def launch_seeded_simulations(
     request: SimulationSeedRequest,
 ) -> SimulationBatchLaunchResult:
-    openai_configured, openai_available, openai_message = OpenAIClientWrapper(
-        get_settings()
-    ).get_status()
-    if not openai_configured or not openai_available:
-        raise SimulationExecutionError(openai_message)
-
     launched_runs: list[RunRecord] = []
     for config in _build_seeded_requests(request.seed):
-        created_at = utc_now()
-        run_id = f"run-{uuid4().hex[:10]}"
-        launched_runs.append(_create_pending_run(config, run_id=run_id, created_at=created_at))
-        Thread(
-            target=_run_simulation_in_background,
-            args=(config, run_id, created_at),
-            daemon=True,
-            name=f"simulation-{run_id}",
-        ).start()
+        launched_runs.append(launch_configured_simulation(config))
 
     return SimulationBatchLaunchResult(
         seed=request.seed,
         count=len(launched_runs),
         runs=launched_runs,
     )
+
+
+def launch_configured_simulation(config: SimulationRunConfig) -> RunRecord:
+    openai_configured, openai_available, openai_message = OpenAIClientWrapper(
+        get_settings()
+    ).get_status()
+    if not openai_configured or not openai_available:
+        raise SimulationExecutionError(openai_message)
+
+    created_at = utc_now()
+    run_id = f"run-{uuid4().hex[:10]}"
+    run = _create_pending_run(config, run_id=run_id, created_at=created_at)
+    Thread(
+        target=_run_simulation_in_background,
+        args=(config, run_id, created_at),
+        daemon=True,
+        name=f"simulation-{run_id}",
+    ).start()
+    return run
+
+
+def launch_true_branch_simulation(source_run: RunRecord, config: SimulationRunConfig) -> RunRecord:
+    openai_configured, openai_available, openai_message = OpenAIClientWrapper(
+        get_settings()
+    ).get_status()
+    if not openai_configured or not openai_available:
+        raise SimulationExecutionError(openai_message)
+    if config.branch_pivot_step_index is None:
+        raise SimulationExecutionError("Branch pivot step is required.")
+
+    branch_plan = _build_true_branch_plan(source_run, config)
+    created_at = utc_now()
+    run_id = f"run-{uuid4().hex[:10]}"
+    run = _create_pending_branch_run(
+        source_run=source_run,
+        config=config,
+        run_id=run_id,
+        created_at=created_at,
+        copied_steps=branch_plan["copied_steps"],
+        copied_negotiations=branch_plan["copied_negotiations"],
+    )
+    Thread(
+        target=_run_true_branch_in_background,
+        args=(source_run, config, run_id, created_at),
+        daemon=True,
+        name=f"branch-{run_id}",
+    ).start()
+    return run
 
 
 def _compose_public_message(*, note: str, fallback: str) -> str:
@@ -692,6 +742,435 @@ def _run_simulation_in_background(
         _execute_simulation_run(config, run_id=run_id, created_at=created_at)
     except Exception:
         return None
+
+
+def _run_true_branch_in_background(
+    source_run: RunRecord,
+    config: SimulationRunConfig,
+    run_id: str,
+    created_at,
+) -> None:
+    try:
+        _execute_true_branch_run(source_run, config, run_id=run_id, created_at=created_at)
+    except Exception:
+        return None
+
+
+def _build_true_branch_plan(source_run: RunRecord, config: SimulationRunConfig) -> dict:
+    pivot_step_index = config.branch_pivot_step_index
+    if pivot_step_index is None:
+        raise SimulationExecutionError("Branch pivot step is required.")
+
+    sorted_steps = sorted(source_run.steps, key=lambda step: step.index)
+    pivot_step = next((step for step in sorted_steps if step.index == pivot_step_index), None)
+    if pivot_step is None:
+        raise SimulationExecutionError(f"Step {pivot_step_index} was not found in run {source_run.id}.")
+
+    copied_steps = [step for step in sorted_steps if step.index <= pivot_step.index]
+    next_step_index = max(step.index for step in copied_steps) + 1
+    negotiation_by_phase = {record.phase: record for record in source_run.negotiations}
+    pivot_is_terminal = pivot_step.kind in {"accept", "reject", "timeout"}
+
+    if pivot_step.phase == PhaseName.SUPPLIER_MANUFACTURER and pivot_is_terminal:
+        first_record = negotiation_by_phase.get(PhaseName.SUPPLIER_MANUFACTURER)
+        if first_record is None or first_record.status != NegotiationStatus.ACCEPTED:
+            raise SimulationExecutionError("Choose a step before the first deal ended.")
+        return {
+            "copied_steps": copied_steps,
+            "copied_negotiations": [first_record],
+            "current_phase": PhaseName.MANUFACTURER_RETAILER,
+            "current_phase_steps": [],
+            "current_negotiation_id": None,
+            "resume_turn_index": 0,
+            "delivered_message": None,
+            "seller_last_offer": None,
+            "buyer_last_offer": None,
+            "next_step_index": next_step_index,
+        }
+
+    if pivot_step.phase == PhaseName.MANUFACTURER_RETAILER and pivot_is_terminal:
+        raise SimulationExecutionError("Choose a step before the final deal ended.")
+
+    copied_negotiations = []
+    if pivot_step.phase == PhaseName.MANUFACTURER_RETAILER:
+        first_record = negotiation_by_phase.get(PhaseName.SUPPLIER_MANUFACTURER)
+        if first_record is None or first_record.status != NegotiationStatus.ACCEPTED:
+            raise SimulationExecutionError("Cannot branch into the second deal without an accepted first deal.")
+        copied_negotiations.append(first_record)
+
+    current_phase_steps = [step for step in copied_steps if step.phase == pivot_step.phase]
+    seller_id, buyer_id = _phase_party_ids(pivot_step.phase)
+    agent_turn_count = len(
+        [
+            step
+            for step in current_phase_steps
+            if step.agent_id in {seller_id, buyer_id} and step.kind != "system_notice"
+        ]
+    )
+    max_turns = min(config.max_rounds_per_negotiation * 2, MAX_AGENT_TURNS_PER_NEGOTIATION)
+    if agent_turn_count >= max_turns:
+        raise SimulationExecutionError("Choose an earlier step before the turn limit was reached.")
+
+    return {
+        "copied_steps": copied_steps,
+        "copied_negotiations": copied_negotiations,
+        "current_phase": pivot_step.phase,
+        "current_phase_steps": current_phase_steps,
+        "current_negotiation_id": current_phase_steps[0].negotiation_id if current_phase_steps else None,
+        "resume_turn_index": agent_turn_count,
+        "delivered_message": _delivered_message_for_next_turn(current_phase_steps),
+        "seller_last_offer": _last_offer_for_agent(current_phase_steps, seller_id),
+        "buyer_last_offer": _last_offer_for_agent(current_phase_steps, buyer_id),
+        "next_step_index": next_step_index,
+    }
+
+
+def _phase_party_ids(phase: PhaseName) -> tuple[str, str]:
+    if phase == PhaseName.SUPPLIER_MANUFACTURER:
+        return "supplier", "manufacturer"
+    return "manufacturer", "retailer"
+
+
+def _last_offer_for_agent(steps: list[NegotiationStep], agent_id: str) -> float | None:
+    return next(
+        (
+            step.proposed_price
+            for step in reversed(steps)
+            if step.agent_id == agent_id and step.kind == "offer" and step.proposed_price is not None
+        ),
+        None,
+    )
+
+
+def _delivered_message_for_next_turn(steps: list[NegotiationStep]) -> dict | None:
+    last_step = next(
+        (
+            step
+            for step in reversed(steps)
+            if step.agent_id != "market_desk" and step.kind != "system_notice"
+        ),
+        None,
+    )
+    if last_step is None or last_step.kind != "offer" or last_step.proposed_price is None:
+        return None
+    return {
+        "type": "offer",
+        "price": last_step.proposed_price,
+        "note": last_step.message,
+        "from_agent_id": last_step.agent_id,
+    }
+
+
+def _agent_by_id(agents: list[Agent], agent_id: str) -> Agent:
+    agent = next((item for item in agents if item.id == agent_id), None)
+    if agent is None:
+        raise SimulationExecutionError(f"Missing required agent: {agent_id}.")
+    return agent
+
+
+def _execute_true_branch_run(
+    source_run: RunRecord,
+    config: SimulationRunConfig,
+    *,
+    run_id: str,
+    created_at,
+) -> RunRecord:
+    branch_plan = _build_true_branch_plan(source_run, config)
+    settings = get_settings()
+    event_collector = RunEventCollector(run_id=run_id, created_at=created_at)
+    event_collector.log(
+        event_type=RunEventType.RUN_START,
+        timestamp=created_at,
+        status=RunStatus.RUNNING.value,
+        note=f"Continuing true branch from {source_run.id} at step {config.branch_pivot_step_index}.",
+        reasoning_summary=f"Operator instruction: {config.branch_instruction or 'none'}",
+    )
+    _log_operator_instruction_event(
+        event_collector,
+        branch_plan=branch_plan,
+        config=config,
+    )
+
+    scenario = (
+        f"{config.product_name} in {config.market_region}. "
+        f"Supplier-to-manufacturer pricing sets the manufacturer cost basis before the retailer negotiation."
+    )
+    scenario_context = _build_scenario_context(config)
+    openai_wrapper = OpenAIClientWrapper(settings)
+    langfuse_wrapper = LangfuseTraceWrapper(settings)
+    product_context = ProductMarketContext(
+        product_name=config.product_name,
+        product_category=config.product_category,
+        market_region=config.market_region,
+        baseline_unit_price=config.baseline_unit_price,
+        target_quantity=config.target_quantity,
+        currency=config.currency,
+        demand_signal=config.demand_signal,
+        supply_signal=config.supply_signal,
+    )
+    agents = source_run.agents
+    supplier = _agent_by_id(agents, "supplier")
+    manufacturer = _agent_by_id(agents, "manufacturer")
+    retailer = _agent_by_id(agents, "retailer")
+    phases = source_run.phases or _build_phases()
+    snapshot_writer = RunSnapshotWriter(
+        run_id=run_id,
+        title=config.title,
+        scenario=scenario,
+        created_at=created_at,
+        product_context=product_context,
+        agents=agents,
+        phases=phases,
+        max_rounds_per_negotiation=config.max_rounds_per_negotiation,
+    )
+
+    copied_steps = branch_plan["copied_steps"]
+    copied_negotiations = branch_plan["copied_negotiations"]
+    current_phase = branch_plan["current_phase"]
+    step_index_start = branch_plan["next_step_index"]
+    all_steps = list(copied_steps)
+    negotiations = list(copied_negotiations)
+    first_record = next(
+        (record for record in negotiations if record.phase == PhaseName.SUPPLIER_MANUFACTURER),
+        None,
+    )
+    second_record = next(
+        (record for record in negotiations if record.phase == PhaseName.MANUFACTURER_RETAILER),
+        None,
+    )
+    manufacturer_cost_basis = first_record.final_price if first_record else None
+    manufacturer_sell_floor = (
+        max(config.manufacturer_min_sell_price, round(manufacturer_cost_basis + config.manufacturer_margin_floor, 2))
+        if manufacturer_cost_basis is not None
+        else None
+    )
+
+    try:
+        if current_phase == PhaseName.SUPPLIER_MANUFACTURER:
+            branch_result = _simulate_negotiation(
+                phase=PhaseName.SUPPLIER_MANUFACTURER,
+                label="Supplier to Manufacturer",
+                product_name=config.product_name,
+                scenario_context=scenario_context,
+                reference_market_price=config.baseline_unit_price,
+                openai_wrapper=openai_wrapper,
+                langfuse_wrapper=langfuse_wrapper,
+                run_id=run_id,
+                event_collector=event_collector,
+                seller=supplier,
+                buyer=manufacturer,
+                min_sell_price=config.supplier_min_sell_price,
+                max_buy_price=config.manufacturer_max_buy_price,
+                quantity=config.target_quantity,
+                max_rounds=config.max_rounds_per_negotiation,
+                step_index_start=step_index_start,
+                dependency_note="True branch continues the original upstream negotiation.",
+                on_step=lambda current_steps: _persist_running_snapshot(
+                    snapshot_writer=snapshot_writer,
+                    event_collector=event_collector,
+                    settings=settings,
+                    steps=[
+                        *[step for step in all_steps if step.phase != PhaseName.SUPPLIER_MANUFACTURER],
+                        *current_steps,
+                    ],
+                    negotiations=negotiations,
+                ),
+                negotiation_id=branch_plan["current_negotiation_id"],
+                existing_steps=branch_plan["current_phase_steps"],
+                resume_turn_index=branch_plan["resume_turn_index"],
+                initial_delivered_message=branch_plan["delivered_message"],
+                initial_seller_last_offer=branch_plan["seller_last_offer"],
+                initial_buyer_last_offer=branch_plan["buyer_last_offer"],
+            )
+            all_steps = [
+                *[step for step in all_steps if step.phase != PhaseName.SUPPLIER_MANUFACTURER],
+                *branch_result.steps,
+            ]
+            negotiations = [
+                *[record for record in negotiations if record.phase != PhaseName.SUPPLIER_MANUFACTURER],
+                branch_result.record,
+            ]
+            first_record = branch_result.record
+            if first_record.status == NegotiationStatus.ACCEPTED and first_record.final_price is not None:
+                manufacturer_cost_basis = first_record.final_price
+                manufacturer_sell_floor = max(
+                    config.manufacturer_min_sell_price,
+                    round(manufacturer_cost_basis + config.manufacturer_margin_floor, 2),
+                )
+                second_result = _simulate_negotiation(
+                    phase=PhaseName.MANUFACTURER_RETAILER,
+                    label="Manufacturer to Retailer",
+                    product_name=config.product_name,
+                    scenario_context=scenario_context,
+                    reference_market_price=config.baseline_unit_price,
+                    openai_wrapper=openai_wrapper,
+                    langfuse_wrapper=langfuse_wrapper,
+                    run_id=run_id,
+                    event_collector=event_collector,
+                    seller=manufacturer,
+                    buyer=retailer,
+                    min_sell_price=manufacturer_sell_floor,
+                    max_buy_price=config.retailer_max_buy_price,
+                    quantity=config.target_quantity,
+                    max_rounds=config.max_rounds_per_negotiation,
+                    step_index_start=max(step.index for step in all_steps) + 1,
+                    dependency_note="Manufacturer sell floor uses the accepted upstream deal as its cost basis.",
+                    on_step=lambda current_steps: _persist_running_snapshot(
+                        snapshot_writer=snapshot_writer,
+                        event_collector=event_collector,
+                        settings=settings,
+                        steps=[*all_steps, *current_steps],
+                        negotiations=negotiations,
+                    ),
+                )
+                all_steps.extend(second_result.steps)
+                negotiations.append(second_result.record)
+                second_record = second_result.record
+        elif current_phase == PhaseName.MANUFACTURER_RETAILER:
+            if first_record is None or first_record.status != NegotiationStatus.ACCEPTED or first_record.final_price is None:
+                raise SimulationExecutionError("Cannot continue the second deal without an accepted first deal.")
+            manufacturer_cost_basis = first_record.final_price
+            manufacturer_sell_floor = max(
+                config.manufacturer_min_sell_price,
+                round(manufacturer_cost_basis + config.manufacturer_margin_floor, 2),
+            )
+            branch_result = _simulate_negotiation(
+                phase=PhaseName.MANUFACTURER_RETAILER,
+                label="Manufacturer to Retailer",
+                product_name=config.product_name,
+                scenario_context=scenario_context,
+                reference_market_price=config.baseline_unit_price,
+                openai_wrapper=openai_wrapper,
+                langfuse_wrapper=langfuse_wrapper,
+                run_id=run_id,
+                event_collector=event_collector,
+                seller=manufacturer,
+                buyer=retailer,
+                min_sell_price=manufacturer_sell_floor,
+                max_buy_price=config.retailer_max_buy_price,
+                quantity=config.target_quantity,
+                max_rounds=config.max_rounds_per_negotiation,
+                step_index_start=step_index_start,
+                dependency_note="True branch continues the original downstream negotiation.",
+                on_step=lambda current_steps: _persist_running_snapshot(
+                    snapshot_writer=snapshot_writer,
+                    event_collector=event_collector,
+                    settings=settings,
+                    steps=[
+                        *[step for step in all_steps if step.phase != PhaseName.MANUFACTURER_RETAILER],
+                        *current_steps,
+                    ],
+                    negotiations=[record for record in negotiations if record.phase != PhaseName.MANUFACTURER_RETAILER],
+                ),
+                negotiation_id=branch_plan["current_negotiation_id"],
+                existing_steps=branch_plan["current_phase_steps"],
+                resume_turn_index=branch_plan["resume_turn_index"],
+                initial_delivered_message=branch_plan["delivered_message"],
+                initial_seller_last_offer=branch_plan["seller_last_offer"],
+                initial_buyer_last_offer=branch_plan["buyer_last_offer"],
+            )
+            all_steps = [
+                *[step for step in all_steps if step.phase != PhaseName.MANUFACTURER_RETAILER],
+                *branch_result.steps,
+            ]
+            negotiations = [
+                *[record for record in negotiations if record.phase != PhaseName.MANUFACTURER_RETAILER],
+                branch_result.record,
+            ]
+            second_record = branch_result.record
+
+        negotiations = sorted(negotiations, key=lambda record: 0 if record.phase == PhaseName.SUPPLIER_MANUFACTURER else 1)
+        all_steps = sorted(all_steps, key=lambda step: step.index)
+        status = _resolve_run_status(negotiations)
+        diagnosis = _build_diagnosis(
+            first_negotiation=first_record or negotiations[0],
+            second_negotiation=second_record,
+            manufacturer_sell_floor=manufacturer_sell_floor,
+            manufacturer_cost_basis=manufacturer_cost_basis,
+            currency=config.currency,
+        )
+        event_collector.log(
+            event_type=RunEventType.FINAL_OUTCOME,
+            status=status.value,
+            note=diagnosis.outcome,
+            reasoning_summary=diagnosis.chain_effect,
+        )
+        run = RunRecord(
+            id=run_id,
+            title=config.title,
+            status=status,
+            scenario=scenario,
+            created_at=created_at,
+            updated_at=utc_now(),
+            product_context=product_context,
+            agents=agents,
+            phases=phases,
+            steps=all_steps,
+            negotiations=negotiations,
+            diagnosis=diagnosis,
+            max_rounds_per_negotiation=config.max_rounds_per_negotiation,
+            notes=f"True branch from {source_run.id} at step {config.branch_pivot_step_index}.",
+            tags=["simulation", "supply-chain", "branch", f"source:{source_run.id}"],
+        )
+        save_run_record(run)
+        event_collector.log(
+            event_type=RunEventType.RUN_END,
+            status=status.value,
+            note="True branch run record and event log persisted.",
+        )
+        event_log = event_collector.build_log()
+        save_run_event_log(settings.events_dir, event_log)
+        save_simulation_export_bundle(
+            exports_dir=settings.exports_dir,
+            run_id=run.id,
+            summary_payload=_build_export_summary_payload(
+                run=run,
+                event_log=event_log,
+                trace_id=None,
+                trace_url=None,
+            ),
+            event_log_payload=event_log.model_dump(mode="json"),
+            trace_payload=_build_trace_export_payload(
+                run=run,
+                trace_id=None,
+                trace_url=None,
+                langfuse_status="Not captured for true branch background run.",
+                langfuse_available=False,
+                langfuse_configured=False,
+            ),
+            conversation_payload=_build_conversation_export_payload(run=run),
+        )
+        return run
+    except Exception as exc:
+        existing_run = get_run_record(run_id)
+        failed_diagnosis = DiagnosisSummary(
+            outcome=f"Branch failed: {exc}",
+            chain_effect="The new version stopped before all future decisions were completed.",
+            key_risks=["The copied original steps remain available in the run."],
+            key_signals=["Backend raised an execution error while continuing the branch."],
+            suggested_next_actions=["Choose an earlier non-final step or simplify the requested change."],
+        )
+        snapshot_writer.save(
+            status=RunStatus.FAILED,
+            steps=existing_run.steps if existing_run is not None else all_steps,
+            negotiations=existing_run.negotiations if existing_run is not None else negotiations,
+            diagnosis=failed_diagnosis,
+            updated_at=utc_now(),
+            notes="True branch failed before completion.",
+        )
+        event_collector.log(
+            event_type=RunEventType.FINAL_OUTCOME,
+            status=RunStatus.FAILED.value,
+            note=str(exc),
+        )
+        event_collector.log(
+            event_type=RunEventType.RUN_END,
+            status=RunStatus.FAILED.value,
+            note="True branch ended with an error.",
+            reasoning_summary=str(exc),
+        )
+        save_run_event_log(settings.events_dir, event_collector.build_log())
+        raise
 
 
 def _create_pending_run(
@@ -780,6 +1259,90 @@ def _create_pending_run(
     return run
 
 
+def _create_pending_branch_run(
+    *,
+    source_run: RunRecord,
+    config: SimulationRunConfig,
+    run_id: str,
+    created_at,
+    copied_steps: list[NegotiationStep],
+    copied_negotiations: list[NegotiationRecord],
+) -> RunRecord:
+    run = _create_pending_run(config, run_id=run_id, created_at=created_at)
+    branch_diagnosis = DiagnosisSummary(
+        outcome="New version is running from the selected step.",
+        chain_effect="The original steps up to the selected point were copied exactly.",
+        key_risks=["Future decisions may diverge from the original run after the selected step."],
+        key_signals=[
+            f"Copied {len(copied_steps)} original steps.",
+            f"Operator instruction: {config.branch_instruction or 'none'}",
+        ],
+        suggested_next_actions=["Open the new run to watch future decisions continue from the selected point."],
+    )
+    run = run.model_copy(
+        update={
+            "steps": copied_steps,
+            "negotiations": copied_negotiations,
+            "diagnosis": branch_diagnosis,
+            "notes": f"True branch from {source_run.id} at step {config.branch_pivot_step_index}.",
+            "tags": [*run.tags, "branch", f"source:{source_run.id}"],
+        }
+    )
+    save_run_record(run)
+    event_collector = RunEventCollector(run_id=run_id, created_at=created_at)
+    event_collector.log(
+        event_type=RunEventType.RUN_START,
+        timestamp=created_at,
+        status=RunStatus.RUNNING.value,
+        note=(
+            f"Starting true branch from {source_run.id} at step "
+            f"{config.branch_pivot_step_index}."
+        ),
+        reasoning_summary=f"Operator instruction: {config.branch_instruction or 'none'}",
+    )
+    _log_operator_instruction_event(
+        event_collector,
+        branch_plan={
+            "copied_steps": copied_steps,
+            "current_phase": copied_steps[-1].phase if copied_steps else None,
+        },
+        config=config,
+    )
+    save_run_event_log(
+        get_settings().events_dir,
+        event_collector.build_log(),
+    )
+    return run
+
+
+def _log_operator_instruction_event(
+    event_collector: RunEventCollector,
+    *,
+    branch_plan: dict,
+    config: SimulationRunConfig,
+) -> None:
+    instruction = (config.branch_instruction or "").strip()
+    copied_steps = branch_plan.get("copied_steps") or []
+    if not instruction or not copied_steps:
+        return
+
+    pivot_step = copied_steps[-1]
+    event_collector.log(
+        event_type=RunEventType.OPERATOR_INSTRUCTION,
+        timestamp=pivot_step.created_at + timedelta(milliseconds=1),
+        phase=pivot_step.phase,
+        round_number=pivot_step.round_number,
+        agent="operator",
+        action="branch_instruction",
+        note=instruction,
+        reasoning_summary=(
+            "This instruction is applied only to decisions after this point. "
+            "The earlier steps were copied from the original run."
+        ),
+        negotiation_id=pivot_step.negotiation_id,
+    )
+
+
 def _persist_running_snapshot(
     *,
     snapshot_writer: RunSnapshotWriter,
@@ -803,87 +1366,6 @@ def _persist_running_snapshot(
         notes="Simulation is still running and this snapshot is live.",
     )
     save_run_event_log(settings.events_dir, event_collector.build_log())
-
-
-def run_test_pipeline(request: SimulationSeedRequest | None = None) -> SimulationTestPipelineResult:
-    settings = get_settings()
-    openai_wrapper = OpenAIClientWrapper(settings)
-    langfuse_wrapper = LangfuseTraceWrapper(settings)
-    openai_configured, openai_available, openai_message = openai_wrapper.get_status()
-    langfuse_configured, langfuse_available, langfuse_message = langfuse_wrapper.get_status()
-    events: list[str] = []
-
-    try:
-        if request is None:
-            raise SimulationExecutionError("Seed input is required.")
-        batch_requests = _build_seeded_requests(request.seed)
-        first_execution = _execute_simulation_run(batch_requests[0])
-        run = first_execution.run
-        for item in batch_requests[1:]:
-            simulate_run(item)
-    except SimulationExecutionError as exc:
-        return SimulationTestPipelineResult(
-            success=False,
-            message=str(exc),
-            run_id="",
-            trace_id=None,
-            export=None,
-            openai=PipelineDependencyStatus(
-                configured=openai_configured,
-                available=openai_available,
-                message=openai_message,
-            ),
-            langfuse=PipelineDependencyStatus(
-                configured=langfuse_configured,
-                available=langfuse_available,
-                message=langfuse_message,
-            ),
-            events=["Simulation did not start because the LLM decision step was unavailable."],
-        )
-
-    events.append(f"Simulated run {run.id} and persisted it to local storage.")
-
-    trace_id = first_execution.trace_id
-    if trace_id:
-        events.append(f"Initialized trace {trace_id}.")
-    else:
-        events.append("Skipped trace initialization because Langfuse is unavailable.")
-
-    export_paths = first_execution.export_paths or {}
-    if export_paths.get("summary"):
-        events.append(f"Saved simulation export bundle to {run.id}.")
-
-    success = True
-    message = "Simulation pipeline completed."
-    if not openai_available and openai_configured:
-        message = "Simulation completed, but the OpenAI client is unavailable."
-    if not langfuse_available and langfuse_configured:
-        message = "Simulation completed, but tracing configuration is incomplete."
-
-    return SimulationTestPipelineResult(
-        success=success,
-        message=message,
-        run_id=run.id,
-        trace_id=trace_id,
-        export=PipelineExportRecord(
-            file_path=export_paths.get("summary", ""),
-            created_at=run.updated_at,
-            event_log_path=export_paths.get("event_log"),
-            trace_path=export_paths.get("trace"),
-            conversation_path=export_paths.get("conversation"),
-        ),
-        openai=PipelineDependencyStatus(
-            configured=openai_configured,
-            available=openai_available,
-            message=openai_message,
-        ),
-        langfuse=PipelineDependencyStatus(
-            configured=langfuse_configured,
-            available=langfuse_available,
-            message=langfuse_message,
-        ),
-        events=events,
-    )
 
 
 class NegotiationSimulationResult:
@@ -1039,6 +1521,7 @@ def _simulate_negotiation(
     phase: PhaseName,
     label: str,
     product_name: str,
+    scenario_context: dict | None,
     reference_market_price: float,
     openai_wrapper: OpenAIClientWrapper,
     langfuse_wrapper: LangfuseTraceWrapper,
@@ -1053,19 +1536,25 @@ def _simulate_negotiation(
     step_index_start: int,
     dependency_note: str,
     on_step=None,
+    negotiation_id: str | None = None,
+    existing_steps: list[NegotiationStep] | None = None,
+    resume_turn_index: int = 0,
+    initial_delivered_message: dict | None = None,
+    initial_seller_last_offer: float | None = None,
+    initial_buyer_last_offer: float | None = None,
 ) -> NegotiationSimulationResult:
-    negotiation_id = f"neg-{uuid4().hex[:8]}"
-    steps: list[NegotiationStep] = []
+    negotiation_id = negotiation_id or f"neg-{uuid4().hex[:8]}"
+    steps: list[NegotiationStep] = list(existing_steps or [])
     step_index = step_index_start
     status = NegotiationStatus.OPEN
     final_price: float | None = None
-    delivered_message: dict | None = None
-    seller_last_offer: float | None = None
-    buyer_last_offer: float | None = None
+    delivered_message: dict | None = initial_delivered_message
+    seller_last_offer: float | None = initial_seller_last_offer
+    buyer_last_offer: float | None = initial_buyer_last_offer
     rounds_completed = 0
     max_turns = min(max_rounds * 2, MAX_AGENT_TURNS_PER_NEGOTIATION)
 
-    for turn_index in range(max_turns):
+    for turn_index in range(resume_turn_index, max_turns):
         round_number = (turn_index // 2) + 1
         rounds_completed = round_number
         turn_number = turn_index + 1
@@ -1147,6 +1636,7 @@ def _simulate_negotiation(
             seller=seller,
             buyer=buyer,
             delivered_message=delivered_message,
+            scenario_context=scenario_context,
             min_sell_price=min_sell_price,
             max_buy_price=max_buy_price,
             seller_last_offer=seller_last_offer,
@@ -1818,6 +2308,7 @@ def _decide_agent_action(
     seller: Agent,
     buyer: Agent,
     delivered_message: dict | None,
+    scenario_context: dict | None,
     min_sell_price: float,
     max_buy_price: float,
     seller_last_offer: float | None,
@@ -1836,6 +2327,7 @@ def _decide_agent_action(
         seller=seller,
         buyer=buyer,
         delivered_message=delivered_message,
+        scenario_context=scenario_context,
         min_sell_price=min_sell_price,
         max_buy_price=max_buy_price,
         seller_last_offer=seller_last_offer,
@@ -1859,6 +2351,7 @@ def _decide_agent_action(
             "max_rounds": max_rounds,
             "max_turns": max_turns,
             "delivered_message": delivered_message,
+            "scenario_context": scenario_context,
             "visible_last_seller_offer": seller_last_offer,
             "visible_last_buyer_offer": buyer_last_offer,
             "seller_floor": min_sell_price,
@@ -1917,6 +2410,7 @@ def _build_agent_prompt(
     seller: Agent,
     buyer: Agent,
     delivered_message: dict | None,
+    scenario_context: dict | None,
     min_sell_price: float,
     max_buy_price: float,
     seller_last_offer: float | None,
@@ -1938,6 +2432,7 @@ def _build_agent_prompt(
         "visible_last_seller_offer": seller_last_offer,
         "visible_last_buyer_offer": buyer_last_offer,
         "delivered_message": delivered_message,
+        "scenario_context": scenario_context,
         "round_number": round_number,
         "turn_number": turn_number,
         "max_rounds": max_rounds,
@@ -1975,6 +2470,9 @@ def _build_agent_prompt(
         "Your reservation prices are hidden from the counterparty and are internal reference points, not rigid rules.\n"
         "Make the move that seems reasonable from your local perspective; imperfect judgment, bluffing, patience, and misreads are allowed.\n"
         "Use the latest market-check result and any operator alert before choosing your next move.\n"
+        "Use scenario_context as authoritative business context.\n"
+        "If operator_instruction is present, apply it only to future decisions after the copied branch history.\n"
+        "If branch_context is present, treat all prior branch history as already finalized and continue from the current state only.\n"
         "The other agent will only see note. Keep it short, direct, and suitable to send externally.\n"
         "Only you and the observability layer will see reason. Put your fuller internal rationale there.\n"
         "If action is make_offer, include price and a short external note.\n"
@@ -2134,7 +2632,7 @@ def _build_harvest_pressure_scenario(rng: Random, seed: int, index: int):
         seed=seed,
         index=index,
         title="Tomato Harvest Pricing Run",
-        market_region=_pick(rng, ["California", "Texas", "Ontario"]),
+        market_region=SEEDED_MARKET_REGION,
         demand_signal="Retail ketchup demand is steady, but wholesale buyers want price protection before peak tomato procurement.",
         supply_signal="Tomato harvest yields are uneven across growing regions, putting pressure on paste input pricing.",
         baseline_unit_price=baseline_unit_price,
@@ -2160,7 +2658,7 @@ def _build_packaging_cost_scenario(rng: Random, seed: int, index: int):
         seed=seed,
         index=index,
         title="Bottle and Cap Cost Run",
-        market_region=_pick(rng, ["Midwest", "Southeast", "Northeast"]),
+        market_region=SEEDED_MARKET_REGION,
         demand_signal="Retailers are asking for stable ketchup pricing even as packaging contracts are being repriced.",
         supply_signal="Glass bottle and cap suppliers increased quoting pressure after freight and packaging resin costs moved up.",
         baseline_unit_price=baseline_unit_price,
@@ -2186,7 +2684,7 @@ def _build_retail_promotion_scenario(rng: Random, seed: int, index: int):
         seed=seed,
         index=index,
         title="Promotion Inventory Surge Run",
-        market_region=_pick(rng, ["West Coast", "Great Lakes", "Mid-Atlantic"]),
+        market_region=SEEDED_MARKET_REGION,
         demand_signal="Retail chains are loading ketchup inventory ahead of a multi-week promotion and need fast replenishment.",
         supply_signal="Upstream ingredient supply is stable, but rush production slots are limited this month.",
         baseline_unit_price=baseline_unit_price,
@@ -2226,14 +2724,10 @@ def _seeded_request(
         currency="USD",
         demand_signal=demand_signal,
         supply_signal=supply_signal,
-        max_rounds_per_negotiation=max_rounds,
+        max_rounds_per_negotiation=min(max_rounds, SEEDED_MAX_ROUNDS_PER_NEGOTIATION),
         supplier_min_sell_price=supplier_min_sell_price,
         manufacturer_max_buy_price=manufacturer_max_buy_price,
         manufacturer_min_sell_price=manufacturer_min_sell_price,
         retailer_max_buy_price=retailer_max_buy_price,
         manufacturer_margin_floor=manufacturer_margin_floor,
     )
-
-
-def _pick(rng: Random, options: list[str]) -> str:
-    return options[rng.randrange(len(options))]

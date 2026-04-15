@@ -7,8 +7,8 @@ import "./globals.css";
 
 
 export const metadata: Metadata = {
-  title: "Tomato Negotiations",
-  description: "Base scaffold for supply chain negotiation runs.",
+  title: "Tomato Treaty",
+  description: "Tomato ketchup supply chain negotiation simulator.",
 };
 
 
@@ -26,12 +26,13 @@ export default async function RootLayout({
         <div className="shell page">
           <header className="topbar">
             <Link className="brand" href="/">
-              Tomato Negotiations
+              <span className="brand-tomato" aria-hidden="true" />
+              Tomato Treaty
             </Link>
             <div className="topbar-tools">
               {runs.length > 0 ? <RunSelector runs={runs} variant="nav" /> : null}
               <nav className="nav">
-                <Link href="/">Home</Link>
+                <Link href="/">Run Simulation</Link>
                 <Link href="/runs">Runs</Link>
               </nav>
             </div>

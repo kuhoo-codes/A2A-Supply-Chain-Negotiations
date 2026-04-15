@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { ErrorState } from "./error-state";
 import { LiveRunDetail } from "./live-run-detail";
@@ -24,7 +23,6 @@ export function RunsWorkspace({
   activeRunIds,
   initialSelectedRunId,
 }: RunsWorkspaceProps) {
-  const router = useRouter();
   const [runs, setRuns] = useState(initialRuns);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(
     initialSelectedRunId ?? initialRuns[0]?.id ?? null,
@@ -147,15 +145,8 @@ export function RunsWorkspace({
           {visibleRuns.map((run) => (
             <RunStripCard
               active={selectedRunId === run.id}
+              href={`/runs/${run.id}`}
               key={run.id}
-              onClick={() => {
-                setSelectedRunId(run.id);
-                const visibleRunIds = visibleRuns.map((visibleRun) => visibleRun.id);
-                const idsParam = visibleRunIds.length > 0 ? `?ids=${visibleRunIds.join(",")}&selected=${run.id}` : `?selected=${run.id}`;
-                router.replace(`/runs${idsParam}`, {
-                  scroll: false,
-                });
-              }}
               run={run}
               single={visibleRuns.length === 1}
             />

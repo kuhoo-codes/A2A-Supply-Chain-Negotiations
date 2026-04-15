@@ -92,8 +92,9 @@ Useful backend endpoints:
 - `GET http://localhost:8000/runs`
 - `GET http://localhost:8000/runs/{id}`
 - `GET http://localhost:8000/runs/{id}/detail`
+- `GET http://localhost:8000/runs/{id}/counterfactual`
 - `POST http://localhost:8000/simulation/run`
-- `POST http://localhost:8000/simulation/test-pipeline`
+- `POST http://localhost:8000/simulation/run/custom`
 - `http://localhost:8000/docs`
 
 ## Start The Frontend
@@ -124,6 +125,7 @@ Useful frontend pages:
 - `http://localhost:3000/`
 - `http://localhost:3000/runs`
 - `http://localhost:3000/runs/{id}`
+- `http://localhost:3000/runs/{id}/replay`
 
 ## Run A Full Simulation Locally
 
@@ -134,6 +136,20 @@ From the frontend:
 3. Click `Run Simulation`
 4. The app creates three tomato-ketchup simulations and refreshes the runs list
 5. Open any generated run detail page from the runs list
+
+## Counterfactual Replay And Time Travel
+
+From a run detail page:
+
+1. Click `Open Counterfactual Replay`.
+2. Review the cheap deterministic scenario estimates. These do not call OpenAI.
+3. Click `Run AI Rerun` only when you want to spend tokens on a new AI-backed counterfactual run.
+4. Use `Time Travel Branches` to select any recorded step from the original run.
+5. Enter a branch instruction that describes the alternate history.
+6. Click `Run Branch` only when you want to spend tokens on a new AI-backed branch.
+7. Open the generated run from the success link.
+
+The original run is never mutated by replay, rerun, or branch actions.
 
 From the backend directly:
 
@@ -152,28 +168,6 @@ What gets saved:
 - offers, market checks, and final outcomes
 - a structured event log per run in `events/`
 - an export bundle per run in `exports/{run_id}/`
-
-## How To Test The Pipeline
-
-### From the frontend
-
-1. Post a seed to the backend pipeline endpoint
-3. Review the inline result block
-
-Expected behavior:
-
-- Three seeded ketchup runs are created and saved in `runs/`
-- An export bundle is saved in `exports/{run_id}/`
-- A real trace id is returned only when Langfuse is configured and available
-- Missing OpenAI or Langfuse keys do not crash the app; the result still returns cleanly
-
-### From the backend directly
-
-```bash
-curl -X POST http://localhost:8000/simulation/test-pipeline \
-  -H "Content-Type: application/json" \
-  -d '{"seed": 42}'
-```
 
 ## Tracing
 
@@ -195,11 +189,10 @@ Tracing is best-effort:
 How to check if tracing is working:
 
 1. Set valid `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` values in `.env`.
-2. Run `POST /simulation/test-pipeline`.
-3. Confirm the response includes a non-null `trace_id`.
-4. Open the run detail page and check the `Trace status and exports` section.
-5. Inspect `exports/{run_id}/trace-metadata.json` for the saved trace id and trace URL.
-6. Inspect `exports/{run_id}/conversation.json` if you want the ordered negotiation transcript in chat-like form.
+2. Run a simulation from the frontend or with `POST /simulation/run`.
+3. Open the run detail page and check the `Trace status and exports` section.
+4. Inspect `exports/{run_id}/trace-metadata.json` for the saved trace id and trace URL.
+5. Inspect `exports/{run_id}/conversation.json` if you want the ordered negotiation transcript in chat-like form.
 
 If tracing is not working, the app will still complete the simulation, but the run detail page and trace export will show tracing as unavailable.
 
