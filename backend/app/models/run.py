@@ -37,6 +37,7 @@ class RunEventType(StrEnum):
     TOOL_CALL = "tool_call"
     MARKET_PRICE_CHECK = "market_price_check"
     MARKET_SHOCK = "market_shock"
+    OPERATOR_INSTRUCTION = "operator_instruction"
     OFFER_MADE = "offer_made"
     OFFER_RECEIVED = "offer_received"
     ACCEPT = "accept"

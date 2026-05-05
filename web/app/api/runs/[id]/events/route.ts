@@ -36,7 +36,7 @@ export async function GET(_: Request, context: RouteContext) {
       },
     });
   } catch {
-    return new Response("Unable to reach the backend run event stream.", {
+    return new Response("Unable to reach the run event stream.", {
       status: 503,
       headers: {
         "Content-Type": "text/plain; charset=utf-8",

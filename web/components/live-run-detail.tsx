@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -73,6 +74,8 @@ type FeedItem =
       priceLabel: string;
       body: string;
       isNew: boolean;
+      sortRank: number;
+      sortIndex: number;
     }
   | {
       key: string;
@@ -86,6 +89,8 @@ type FeedItem =
       kind: string;
       priceLabel: string;
       body: string;
+      sortRank: number;
+      sortIndex: number;
     };
 
 const CHAT_PHASES: PhaseName[] = [
@@ -391,6 +396,9 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
             </div>
 
             <div className="hero-actions">
+              <Link className="button secondary" href={`/runs/${run.id}/replay`}>
+                Start From A Step
+              </Link>
               {run.status === "running" ? (
                 <span className="badge leaf">{liveStatusLabel}</span>
               ) : null}
@@ -432,7 +440,7 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
                   <div className="phone-header">
                     <span>9:41</span>
                     <span>{column.label}</span>
-                    <span>{column.feedItems.length} items</span>
+                    <span>{column.messages.length} messages</span>
                   </div>
                   <div className="phone-thread">
                     {column.feedItems.length > 0 ? (
@@ -442,6 +450,8 @@ export function LiveRunDetail({ initialDetail }: LiveRunDetailProps) {
                           item.speakerId === "market_desk" || item.kind === "system_notice"
                             ? "system-notice"
                             : item.type === "activity" && item.kind === "market_shock"
+                            ? "shock-bar"
+                            : item.type === "activity" && item.kind === "operator_instruction"
                             ? "shock-bar"
                             : item.type === "activity"
                             ? `activity ${isOutgoing ? "outgoing" : "incoming"}`
@@ -869,7 +879,7 @@ function buildBeliefSamplesFromEvents(events: RunEvent[], trueMarketPrice: numbe
         event.event_type === "market_price_check" &&
         event.observed_market_price !== null,
     )
-    .map((event) => ({
+    .map((event, index) => ({
       timestamp: event.timestamp,
       phase: event.phase,
       round: event.round,
@@ -936,6 +946,8 @@ function buildPhoneFeedItems({
           : "No price",
       body: message.message,
       isNew: highlightedMessageIndex === message.index,
+      sortRank: 40,
+      sortIndex: message.index,
     }));
 
   const activityItems: FeedItem[] = events
@@ -943,12 +955,12 @@ function buildPhoneFeedItems({
     .filter(
       (event) =>
         event.event_type === "market_shock" ||
+        event.event_type === "operator_instruction" ||
         (event.event_type === "agent_turn" && Boolean(event.reasoning_summary)) ||
-        event.event_type === "offer_received" ||
         (event.event_type === "tool_call" &&
           (event.action === "review_state" || event.action === "check_market_price")),
     )
-    .map((event) => ({
+    .map((event, index) => ({
       key: `activity:${getRunEventKey(event)}`,
       type: "activity",
       timestamp: event.timestamp,
@@ -958,6 +970,8 @@ function buildPhoneFeedItems({
       speakerLabel:
         event.event_type === "market_shock"
           ? "Market Shock"
+          : event.event_type === "operator_instruction"
+          ? "Operator Instruction"
           : event.event_type === "agent_turn" && event.reasoning_summary
           ? `${getEventSpeakerName(event)} (Thinking)`
           : getEventSpeakerName(event),
@@ -965,27 +979,60 @@ function buildPhoneFeedItems({
       kind:
         event.event_type === "market_shock"
           ? "market_shock"
+          : event.event_type === "operator_instruction"
+          ? "operator_instruction"
           : event.event_type === "agent_turn"
           ? "thinking"
-          : event.event_type === "offer_received"
-          ? "offer_received"
           : event.action === "check_market_price"
             ? "market_check"
             : "review_state",
       priceLabel:
         event.event_type === "market_shock"
           ? "Injected event"
+          : event.event_type === "operator_instruction"
+          ? "New direction"
           : event.offer_price !== null
           ? formatCurrency(event.offer_price, currency)
           : event.observed_market_price !== null
             ? formatCurrency(event.observed_market_price, currency)
             : "In progress",
       body: describeActivityEvent(event, currency),
+      sortRank: getActivitySortRank(event),
+      sortIndex: index,
     }));
 
-  return [...messageItems, ...activityItems].sort(
-    (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
-  );
+  return [...messageItems, ...activityItems].sort(compareFeedItems);
+}
+
+function compareFeedItems(left: FeedItem, right: FeedItem): number {
+  const timestampDelta = new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime();
+  if (timestampDelta !== 0) {
+    return timestampDelta;
+  }
+
+  const rankDelta = left.sortRank - right.sortRank;
+  if (rankDelta !== 0) {
+    return rankDelta;
+  }
+
+  return left.sortIndex - right.sortIndex;
+}
+
+function getActivitySortRank(event: RunEvent): number {
+  if (event.action === "review_state") {
+    return 10;
+  }
+  if (event.action === "check_market_price") {
+    return 20;
+  }
+  if (event.event_type === "market_shock" || event.event_type === "operator_instruction") {
+    return 25;
+  }
+  if (event.event_type === "agent_turn") {
+    return 30;
+  }
+
+  return 35;
 }
 
 function getEventSpeakerName(event: RunEvent): string {
@@ -1018,12 +1065,12 @@ function describeActivityEvent(event: RunEvent, currency: string): string {
     )} to ${formatCurrency(event.observed_market_price, currency)} (${changePercent > 0 ? "+" : ""}${changePercent.toFixed(1)}%).`;
   }
 
-  if (event.event_type === "agent_turn" && event.reasoning_summary) {
-    return event.reasoning_summary;
+  if (event.event_type === "operator_instruction") {
+    return event.note ?? "Apply this instruction to the next decisions in this run.";
   }
 
-  if (event.event_type === "offer_received") {
-    return event.note ?? "Received the counterparty offer and queued it for review.";
+  if (event.event_type === "agent_turn" && event.reasoning_summary) {
+    return event.reasoning_summary;
   }
 
   if (event.action === "review_state") {

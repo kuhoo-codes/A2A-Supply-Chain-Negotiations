@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 
-import { getApiBaseUrl, toUserFacingError } from "../../../lib/api";
-import { RunSummary } from "../../../lib/api-types";
+import { getApiBaseUrl, toUserFacingError } from "../../../../../lib/api";
+import { CounterfactualReplayResponse } from "../../../../../lib/api-types";
 
 
-export async function GET() {
+type RouteContext = {
+  params: Promise<{
+    id: string;
+  }>;
+};
+
+
+export async function GET(_: Request, context: RouteContext) {
+  const { id } = await context.params;
+
   try {
-    const response = await fetch(`${getApiBaseUrl()}/runs`, {
+    const response = await fetch(`${getApiBaseUrl()}/runs/${id}/counterfactual`, {
       cache: "no-store",
     });
 
@@ -19,20 +28,20 @@ export async function GET() {
           data: null,
           error: toUserFacingError(
             errorPayload?.detail,
-            "Unable to load saved runs right now.",
+            "Unable to load the replay page right now.",
           ),
         },
         { status: response.status },
       );
     }
 
-    const data = (await response.json()) as RunSummary[];
+    const data = (await response.json()) as CounterfactualReplayResponse;
     return NextResponse.json({ data, error: null });
   } catch {
     return NextResponse.json(
       {
         data: null,
-        error: "Unable to load saved runs right now.",
+        error: "Unable to load the replay page right now.",
       },
       { status: 503 },
     );

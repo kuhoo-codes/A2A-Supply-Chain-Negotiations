@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException
 
-from backend.app.models.simulation import SimulationBatchLaunchResult, SimulationTestPipelineResult
-from backend.app.models.simulation_request import SimulationSeedRequest
+from backend.app.models.simulation import SimulationBatchLaunchResult
+from backend.app.models.simulation_request import SimulationRunConfig, SimulationSeedRequest
 from backend.app.services.simulation_service import (
     SimulationExecutionError,
+    launch_configured_simulation,
     launch_seeded_simulations,
-    run_test_pipeline,
 )
 
 
@@ -22,6 +22,12 @@ def run_simulation(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@router.post("/test-pipeline", response_model=SimulationTestPipelineResult)
-def test_pipeline(payload: SimulationSeedRequest) -> SimulationTestPipelineResult:
-    return run_test_pipeline(payload)
+@router.post("/run/custom", response_model=SimulationBatchLaunchResult)
+def run_custom_simulation(
+    payload: SimulationRunConfig,
+) -> SimulationBatchLaunchResult:
+    try:
+        run = launch_configured_simulation(payload)
+        return SimulationBatchLaunchResult(seed=0, count=1, runs=[run])
+    except SimulationExecutionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

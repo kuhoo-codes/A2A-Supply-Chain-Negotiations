@@ -12,6 +12,14 @@ EXPORTS_DIR = ROOT_DIR / "exports"
 EVENTS_DIR = ROOT_DIR / "events"
 
 
+def _path_from_env(name: str, default: Path) -> Path:
+    value = os.getenv(name)
+    if not value:
+        return default
+
+    return Path(value).expanduser()
+
+
 def load_env_file() -> None:
     if not ENV_PATH.exists():
         return
@@ -66,7 +74,7 @@ def get_settings() -> Settings:
             "NEXT_PUBLIC_API_BASE_URL",
             "http://localhost:8000",
         ),
-        runs_dir=RUNS_DIR,
-        exports_dir=EXPORTS_DIR,
-        events_dir=EVENTS_DIR,
+        runs_dir=_path_from_env("A2A_RUNS_DIR", RUNS_DIR),
+        exports_dir=_path_from_env("A2A_EXPORTS_DIR", EXPORTS_DIR),
+        events_dir=_path_from_env("A2A_EVENTS_DIR", EVENTS_DIR),
     )

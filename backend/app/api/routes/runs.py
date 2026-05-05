@@ -6,6 +6,11 @@ from fastapi.responses import StreamingResponse
 
 from backend.app.core.config import get_settings
 from backend.app.models.run import RunRecord, RunSummary
+from backend.app.models.counterfactual import (
+    CounterfactualBranchRunRequest,
+    CounterfactualBranchRunResponse,
+    CounterfactualReplayResponse,
+)
 from backend.app.models.simulation import (
     RunDetailExportArtifacts,
     RunDetailResponse,
@@ -13,10 +18,18 @@ from backend.app.models.simulation import (
     RunShockRequest,
     RunShockResponse,
 )
+from backend.app.services.counterfactual_service import (
+    build_counterfactual_replay,
+    build_branch_run_config,
+)
 from backend.app.services.event_repository import get_run_event_log
 from backend.app.services.export_repository import get_simulation_export_bundle
 from backend.app.services.run_repository import get_run_record, list_run_summaries
 from backend.app.services.shock_registry import build_pending_shock, get_shock_registry
+from backend.app.services.simulation_service import (
+    SimulationExecutionError,
+    launch_true_branch_simulation,
+)
 
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -65,6 +78,46 @@ def get_run_detail(run_id: str) -> RunDetailResponse:
             if export_bundle and export_bundle.get("conversation")
             else _build_conversation_from_run(run)
         ),
+    )
+
+
+@router.get("/{run_id}/counterfactual", response_model=CounterfactualReplayResponse)
+def get_run_counterfactual_replay(run_id: str) -> CounterfactualReplayResponse:
+    run = get_run_record(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    return build_counterfactual_replay(run)
+
+
+@router.post("/{run_id}/counterfactual/branch", response_model=CounterfactualBranchRunResponse)
+def launch_run_branch(
+    run_id: str,
+    payload: CounterfactualBranchRunRequest,
+) -> CounterfactualBranchRunResponse:
+    source_run = get_run_record(run_id)
+    if source_run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    try:
+        config = build_branch_run_config(
+            source_run,
+            pivot_step_index=payload.pivot_step_index,
+            instruction=payload.instruction,
+            label=payload.label,
+        )
+        branch_run = launch_true_branch_simulation(source_run, config)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except SimulationExecutionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return CounterfactualBranchRunResponse(
+        source_run_id=source_run.id,
+        pivot_step_index=payload.pivot_step_index,
+        run_id=branch_run.id,
+        status=branch_run.status.value,
+        message="New version started. Open the new run to watch what changes after the selected step.",
     )
 
 
